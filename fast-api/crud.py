@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 
 from db_model import CameraSetting
-from schema import UICameraSetting, CameraSettingCheck, AvailableUSBPortResponse
+from schema import UICameraSetting, CameraSettingCheck, USBPortResponse
 import config
 
 
@@ -87,9 +87,9 @@ def get_available_usb_port(db: Session):
         available_ports = [port for port in config.CAMERA_USB_PORTS if port not in usb_ports]
         print(available_ports)
         if available_ports:
-            return [AvailableUSBPortResponse(name=f"ポート{port}", value=port) for port in available_ports]
+            return [USBPortResponse(name=f"ポート{port}", value=port) for port in available_ports]
         else:
             return []
 
     available_ports = config.CAMERA_USB_PORTS
-    return [AvailableUSBPortResponse(name=f"ポート{port}", value=port) for port in available_ports]
+    return [USBPortResponse(name=f"ポート{port}", value=port) for port in available_ports]

@@ -18,7 +18,7 @@ import config
 import crud
 from db_model import Base, CameraSetting
 from schema import UICameraSetting, CameraSettingResponse, DBCameraSetting, CameraSettingCheckResponse, \
-    AvailableUSBPortResponse
+    USBPortResponse
 from typing import Union, Literal
 
 # SQLAlchemyEngine の作成
@@ -121,6 +121,17 @@ def load_camera_setting_page_parameter(db: Session = Depends(get_db)):
     :return:
     """
     return crud.get_available_usb_port(db)
+
+
+@app.get("/get_camera/", response_model=list)
+def load_camera_setting_page_parameter(db: Session = Depends(get_db)):
+    """
+    登録されているカメラ名とUSBポート値をリストで取得する
+    :param db:
+    :return:
+    """
+
+    return crud.get_all_camera_setting(db)
 
 # uvicorn app:app --reload --host=0.0.0.0
 

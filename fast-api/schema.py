@@ -47,7 +47,7 @@ class CameraSettingCheckResponse(BaseModel):
         orm_mode = True
 
 
-class AvailableUSBPortResponse(BaseModel):
+class USBPortResponse(BaseModel):
     """
     使用可能なUSBポートのリストのフォーマット
     """
