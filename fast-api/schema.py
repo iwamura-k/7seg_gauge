@@ -56,3 +56,14 @@ class USBPortResponse(BaseModel):
 
     class Config:
         orm_mode = True
+
+
+class SettingImageResponse(BaseModel):
+    """
+    設定画像のレスポンス
+    """
+    name: str
+    value: str
+
+    class Config:
+        orm_mode = True

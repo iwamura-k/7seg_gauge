@@ -1,8 +1,17 @@
-from sqlalchemy.orm import Session
+import base64
+import datetime
+import io
+import subprocess
+import time
+import uuid
 
-from db_model import CameraSetting
+
+from sqlalchemy.orm import Session
+from db_model import CameraSetting, OCRSetting,Base
 from schema import UICameraSetting, CameraSettingCheck, USBPortResponse
 import config
+from PIL import Image
+import cv2
 
 
 def check_camera_setting(settings: list[UICameraSetting]):
@@ -93,3 +102,109 @@ def get_available_usb_port(db: Session):
 
     available_ports = config.CAMERA_USB_PORTS
     return [USBPortResponse(name=f"ポート{port}", value=port) for port in available_ports]
+
+
+class UsbVideoDevice():
+    def __init__(self):
+        self.__device_list = []
+
+        try:
+            cmd = 'ls -la /dev/v4l/by-id'
+            res = subprocess.check_output(cmd.split())
+            by_id = res.decode()
+        except Exception as e:
+            print(e)
+
+        try:
+            cmd = 'ls -la /dev/v4l/by-path'
+            res = subprocess.check_output(cmd.split())
+            by_path = res.decode()
+        except Exception as e:
+            print(e)
+
+        # デバイス名取得
+        device_names = {}
+        for line in by_id.split('\n'):
+            if '../../video' in line:
+                tmp = self.__split(line, ' ')
+                if "" in tmp:
+                    tmp.remove("")
+                name = tmp[8]
+                device_id = tmp[10].replace('../../video', '')
+                device_names[device_id] = name
+
+        # ポート番号取得
+        for line in by_path.split('\n'):
+            if 'usb-0' in line:
+                tmp = self.__split(line, '0-usb-0:1.')
+                tmp = self.__split(tmp[1], ':')
+                port = tmp[0]
+                tmp = self.__split(tmp[1], '../../video')
+                device_id = int(tmp[1])
+                if device_id % 2 == 0:
+                    name = device_names[str(device_id)]
+                    self.__device_list.append((device_id, port, name))
+
+    @staticmethod
+    def __split(string, val):
+        tmp = string.split(val)
+        if '' in tmp:
+            tmp.remove('')
+        return tmp
+
+    # 認識しているVideoデバイスの一覧を表示する
+    def display_video_devices(self):
+        for (device_id, port, name) in self.__device_list:
+            print("/dev/video{} port:{} {}".format(device_id, port, name))
+
+    # ポート番号（1..）を指定してVideoIDを取得する
+    def get_video_id(self, port):
+        print(self.__device_list)
+        for (device_id, p, _) in self.__device_list:
+            if p == port:
+                return device_id
+        return None
+
+
+def get_timestamp() -> str:
+    jst = datetime.timezone(datetime.timedelta(hours=+9), "JST")
+    now = datetime.datetime.now(jst)
+    timestamp = now.strftime('%Y%m%d%H%M%S')
+    return timestamp
+
+
+def insert_ocr_setting(usb_port,image,db: Session):
+    """
+    引数settingのカメラ設定データをデータベースに新規追加する
+    :param db:
+
+    :return:
+    """
+
+    new_setting = OCRSetting(id=str(uuid.uuid4()),
+                             camera_usb_port=usb_port,
+                             setting_image=image,
+                             setting_name="",
+                             unit="",
+                             is_valid=True,
+                             is_keystone_correction=True,
+                             keystone_correction=
+                             {},
+                             line_color="red",
+                             digit_space="10",
+                             digit_settings={},
+                             decimal_point_settings={},
+                             digit_color={},
+                             background_color={}
+
+                             )
+    db.add(new_setting)
+    db.commit()
+    db.refresh(new_setting)
+    return db.query(OCRSetting).all()
+
+
+def convert_to_byte_image(image):
+    # バイナリデータに変換
+    _, img_encoded = cv2.imencode('.png', image)
+    return img_encoded.tobytes()

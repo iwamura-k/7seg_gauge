@@ -1,13 +1,17 @@
 # 標準ライブラリ
 import datetime
+import glob
+import io
+import os
 import sys
 
 sys.path.append('/home/pi/.local/lib/python3.9/site-packages')
 
 # サードパーティーライブラリ
+import cv2
 from fastapi import FastAPI, Request, Depends, HTTPException, status
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from starlette.middleware.cors import CORSMiddleware
@@ -18,8 +22,9 @@ import config
 import crud
 from db_model import Base, CameraSetting
 from schema import UICameraSetting, CameraSettingResponse, DBCameraSetting, CameraSettingCheckResponse, \
-    USBPortResponse
+    SettingImageResponse
 from typing import Union, Literal
+from ocr import get_perspective_image
 
 # SQLAlchemyEngine の作成
 CONNECT_STR = '{}://{}:{}@{}:{}/{}'.format(config.DATABASE, config.USER, config.PASSWORD, config.HOST, config.PORT,
@@ -132,6 +137,88 @@ def load_camera_setting_page_parameter(db: Session = Depends(get_db)):
     """
 
     return crud.get_all_camera_setting(db)
+
+
+@app.get("/take_an_image/")
+def take_an_image(usb_port,db: Session = Depends(get_db)):
+    """
+    選択したカメラで設定用の画像を撮影する
+    :param usb_port:
+    :param db:
+    :return:
+    """
+    print(usb_port)
+    """
+    usb_device=crud.UsbVideoDevice()
+    usb_port=f"PORT_{usb_port}"
+    s = config.USB_DEV_ID[usb_port]
+    print(s)
+    video_id=usb_device.get_video_id(s)
+    """
+    video_id=0
+    if video_id is not None:
+        cap = cv2.VideoCapture(video_id)
+        # 画像をキャプチャする
+        ret, frame = cap.read()
+        if ret:
+            timestamp=crud.get_timestamp()
+            print(timestamp)
+            # 画像を保存する
+            image_directory=f"{config.SETTING_IMAGE_PATH}/{usb_port}"
+            os.makedirs(image_directory, exist_ok=True)
+            cv2.imwrite(f"{image_directory}/{timestamp}.jpg", frame)
+        else:
+            return "画像の撮影に失敗しました"
+        # カメラを閉じる
+        cap.release()
+        return "画像の撮影に成功しました"
+    return "画像の撮影に失敗しました"
+
+@app.get("/get_setting_image/")
+def get_setting_image(usb_port,db: Session = Depends(get_db)):
+    """
+    選択したカメラで設定用の画像を撮影する
+    :param usb_port:
+    :param db:
+    :return:
+    """
+    print(usb_port)
+    image_directory = f"{config.SETTING_IMAGE_PATH}/{usb_port}"
+    images=glob.glob(f"{image_directory}/*")
+    images=[image.split("\\")[1] for image in images]
+    print(images)
+    return [SettingImageResponse(name=image, value=image) for image in images]
+
+
+@app.get("/get_new_setting/")
+def add_setting(usb_port,image,db: Session = Depends(get_db)):
+    """
+    選択したカメラで設定用の画像を撮影する
+    :param image:
+    :param usb_port:
+    :param db:
+    :return:
+    """
+    print(usb_port,image)
+    return crud.insert_ocr_setting(usb_port=usb_port,image=image,db=db)
+
+
+@app.get("/do_keystone_correction/")
+def add_setting(x1,y1,x2,y2,x3,y3,x4,y4,path,db: Session = Depends(get_db)):
+    """
+    選択したカメラで設定用の画像を撮影する
+    :param image:
+    :param usb_port:
+    :param db:
+    :return:
+    """
+    print(x1,y1,x2,y2,x3,y3,x4,y4,path)
+    perspective_points=list(map(int,[x1,y1,x2,y2,x3,y3,x4,y4]))
+    img=cv2.imread(filename=f"{config.SETTING_IMAGE_PATH}/{path}")
+    perspective_image=get_perspective_image(array=perspective_points,img=img)
+    byte_image=crud.convert_to_byte_image(perspective_image)
+    #FastAPIのStreamingResponseを使用して画像をストリーミングレスポンスとして送信
+    return StreamingResponse(io.BytesIO(byte_image), media_type="image/png")
 
 # uvicorn app:app --reload --host=0.0.0.0
 
