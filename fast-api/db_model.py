@@ -9,7 +9,7 @@ Base = declarative_base()
 
 # カメラ設定テーブルの定義
 class CameraSetting(Base):
-    __tablename__ = 'camera_setting'
+    __tablename__ = "camera_setting"
     usb_port = Column(String, primary_key=True, index=True)
     name = Column(String)
     is_valid = Column(Boolean)
@@ -19,24 +19,22 @@ class CameraSetting(Base):
 
 
 class OCRSetting(Base):
-    __tablename__ = 'ocr_setting'
+    __tablename__ = "ocr_setting"
 
-    id=Column(String,primary_key=True, index=True)
-    camera_usb_port= Column(String)
-    setting_image=Column(String)
-    setting_name=Column(String)
-    unit=Column(String)
-    is_valid=Column(Boolean)
-    is_keystone_correction=Column(Boolean)
-    keystone_correction=Column(JSON)
-    line_color=Column(String)
-    digit_space=Column(Integer)
-    digit_settings=Column(JSON)
-    decimal_point_settings=Column(JSON)
-    digit_color=Column(JSON)
-    background_color=Column(JSON)
-
-
-
-
+    id = Column(String, primary_key=True, index=True)
+    camera_port = Column(Integer)
+    setting_image = Column(String)
+    setting_name = Column(String)
+    unit = Column(String)
+    is_segment_points_detection = Column(Boolean)
+    perspective_transformation_setting = Column(JSON)
+    segment_on_color = Column(JSON)
+    segment_off_color = Column(JSON)
+    segment_point_setting = Column(JSON)
+    segment_region_settings = Column(JSON)
+    segment_region_space = Column(Integer)
+    decimal_point_setting = Column(JSON)
+    is_setting_disabled = Column(Boolean)
+    pivot_color = Column(String)
+    pivot_size = Column(Integer)
 

@@ -1,5 +1,5 @@
 # データベース接続設定
-DATABASE = 'postgresql'
+DATABASE = 'mydb'
 USER = 'postgres'
 PASSWORD = 'admin'
 HOST = 'localhost'

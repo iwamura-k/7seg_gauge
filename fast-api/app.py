@@ -20,20 +20,23 @@ import uvicorn
 # 自作モジュール
 import config
 import crud
-from db_model import Base, CameraSetting
-from schema import UICameraSetting, CameraSettingResponse, DBCameraSetting, CameraSettingCheckResponse, \
-    SettingImageResponse
+from db_model import Base, CameraSetting,OCRSetting
+from data_schema import UICameraSetting, CameraSettingResponse, DBCameraSetting, CameraSettingCheckResponse, \
+    SettingImageResponse,UIOCRSetting,UIOCRSetting2
 from typing import Union, Literal
 from ocr import get_perspective_image
 
 # SQLAlchemyEngine の作成
 CONNECT_STR = '{}://{}:{}@{}:{}/{}'.format(config.DATABASE, config.USER, config.PASSWORD, config.HOST, config.PORT,
-                                           config.DB_NAME)
+                                       config.DB_NAME)
+"""   
 engine = create_engine(
     CONNECT_STR,
     encoding="utf-8",
     echo=False
 )
+"""
+engine = create_engine('sqlite:///sample_db.sqlite3', echo=True)
 # DBセッションを作るクラスを作成
 SessionClass = sessionmaker(engine)
 # DBテーブルを作成
@@ -74,7 +77,7 @@ def get_db():
         db.close()
 
 
-@app.post("/register_camera_setting/", response_model=Union[list[CameraSettingResponse], CameraSettingCheckResponse])
+@app.post("/register_camera_setting/")
 def register_camera_setting(settings: list[UICameraSetting], db: Session = Depends(get_db)):
     """
     UIに入力されたカメラ設定をチェックし、チェックＯＫで設定をデータベースCRUD操作する
@@ -108,7 +111,7 @@ def register_camera_setting(settings: list[UICameraSetting], db: Session = Depen
         return crud.get_all_camera_setting(db)
 
 
-@app.get("/load_camera_setting/", response_model=list[CameraSettingResponse])
+@app.get("/load_camera_setting/")
 def load_camera_setting(db: Session = Depends(get_db)):
     """
     カメラの設定をすべて取得し、UIに返却する
@@ -129,7 +132,7 @@ def load_camera_setting_page_parameter(db: Session = Depends(get_db)):
 
 
 @app.get("/get_camera/", response_model=list)
-def load_camera_setting_page_parameter(db: Session = Depends(get_db)):
+def get_camera(db: Session = Depends(get_db)):
     """
     登録されているカメラ名とUSBポート値をリストで取得する
     :param db:
@@ -222,3 +225,44 @@ def add_setting(x1,y1,x2,y2,x3,y3,x4,y4,path,db: Session = Depends(get_db)):
 
 # uvicorn app:app --reload --host=0.0.0.0
 
+
+@app.post("/add_new_setting/")
+def add_new_setting(data:UIOCRSetting,db: Session = Depends(get_db)):
+    ret=""
+    try:
+        crud.insert_ocr_setting(db,data)
+        ret="実行に成功しました。"
+    except Exception:
+        ret="実行に失敗しました。"
+    finally:
+        return ret
+
+@app.get("/setting_ids_and_names/")
+def get_setting_ids_and_names(db: Session = Depends(get_db)):
+    return crud.setting_ids_and_names(db)
+
+@app.get("/get_ocr_setting/")
+def get_ocr_setting(setting_id:str,db: Session = Depends(get_db)):
+    return crud.get_ocr_setting(setting_id,db)
+
+@app.post("/update_ocr_setting/")
+def update_ocr_setting(data:UIOCRSetting2,db: Session = Depends(get_db)):
+    ret = ""
+    try:
+        crud.update_ocr_setting(db, data)
+        ret = "実行に成功しました。"
+    except Exception:
+        ret = "実行に失敗しました。"
+    finally:
+        return ret
+
+@app.get("/delete_ocr_setting/")
+def delete_ocr_setting(id:str,db: Session = Depends(get_db)):
+    ret = ""
+    try:
+        crud.delete_ocr_setting(db, id)
+        ret = "実行に成功しました。"
+    except Exception:
+        ret = "実行に失敗しました。"
+    finally:
+        return ret
