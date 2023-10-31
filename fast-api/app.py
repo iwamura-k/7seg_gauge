@@ -177,6 +177,31 @@ def take_an_image(usb_port,db: Session = Depends(get_db)):
         return "画像の撮影に成功しました"
     return "画像の撮影に失敗しました"
 
+@app.get("/delete_an_image/")
+def delete_an_image(usb_port,image_name,db: Session = Depends(get_db)):
+    """
+    選択したカメラで設定用の画像を撮影する
+    :param usb_port:
+    :param db:
+    :return:
+    """
+    print(usb_port,image_name)
+    """
+    usb_device=crud.UsbVideoDevice()
+    usb_port=f"PORT_{usb_port}"
+    s = config.USB_DEV_ID[usb_port]
+    print(s)
+    video_id=usb_device.get_video_id(s)
+    """
+    image_path=f"{config.SETTING_IMAGE_PATH}/{usb_port}/{image_name}"
+    try:
+        os.remove(image_path)
+    except FileNotFoundError:
+        return "ファイルが存在しません"
+    return "ファイルを削除しました"
+
+
+
 @app.get("/get_setting_image/")
 def get_setting_image(usb_port,db: Session = Depends(get_db)):
     """
@@ -223,7 +248,7 @@ def add_setting(x1,y1,x2,y2,x3,y3,x4,y4,path,db: Session = Depends(get_db)):
     #FastAPIのStreamingResponseを使用して画像をストリーミングレスポンスとして送信
     return StreamingResponse(io.BytesIO(byte_image), media_type="image/png")
 
-# uvicorn app:app --reload --host=0.0.0.0
+# uvicorn app:app --reload --host=0.0.0.0 --port=8000
 
 
 @app.post("/add_new_setting/")
