@@ -2,7 +2,6 @@ import numpy as np
 import cv2
 
 
-
 # 射影変換画像を求める
 def get_perspective_image(array, img):
     # 変換前4点の座標　p1:左上　p2:右上 p3:右下 p4:左下

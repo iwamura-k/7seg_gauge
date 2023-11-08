@@ -2,7 +2,7 @@ from typing import Union, Literal, Optional
 from pydantic import BaseModel, Field
 
 
-class DBCameraSetting(BaseModel):
+class BaseCameraSetting(BaseModel):
     """
     カメラ設定のＤＢフォーマット
     """
@@ -11,14 +11,14 @@ class DBCameraSetting(BaseModel):
     is_valid: bool
 
 
-class UICameraSetting(DBCameraSetting):
+class UICameraSetting(BaseCameraSetting):
     """
     サーバーに入力されるカメラ設定のフォーマット
     """
     is_delete: bool
 
 
-class CameraSettingResponse(DBCameraSetting):
+class CameraSettingResponse(BaseCameraSetting):
     """
     サーバーから出力されるカメラ設定のフォーマット
     """
@@ -68,66 +68,74 @@ class SettingImageResponse(BaseModel):
     class Config:
         orm_mode = True
 
+
 class UIOCRSetting(BaseModel):
-    setting_name:str
-    value_unit:str
-    camera_port:int
-    image_name:str
-    segment_region_table:list
-    segment_region_space:int
-    segment_point_table:list
-    roi_x1:int
-    roi_y1:int
+    setting_name: str
+    value_unit: str
+    camera_port: int
+    image_name: str
+    segment_region_table: list
+    segment_region_space: int
+    segment_point_table: list
+    roi_x1: int
+    roi_y1: int
     roi_x2: int
     roi_y2: int
     roi_x3: int
     roi_y3: int
     roi_x4: int
     roi_y4: int
-    on_color_blue:int
+    on_color_blue: int
     on_color_green: int
     on_color_red: int
     off_color_blue: int
     off_color_green: int
     off_color_red: int
-    is_setting_disabled:bool
-    is_segment_outline_setting_enabled:bool
-    decimal_point_table:list
-    pivot_color_select:str
-    pivot_size:int
+    is_setting_disabled: bool
+    is_segment_outline_setting_enabled: bool
+    decimal_point_table: list
+    pivot_color_select: str
+    pivot_size: int
+
 
 class UIOCRSetting2(BaseModel):
-    setting_id:str
-    setting_name:str
-    value_unit:str
-    camera_port:int
-    image_name:str
-    segment_region_table:list
-    segment_region_space:int
-    segment_point_table:list
-    roi_x1:int
-    roi_y1:int
+    setting_id: str
+    setting_name: str
+    value_unit: str
+    camera_port: int
+    image_name: str
+    segment_region_table: list
+    segment_region_space: int
+    segment_point_table: list
+    roi_x1: int
+    roi_y1: int
     roi_x2: int
     roi_y2: int
     roi_x3: int
     roi_y3: int
     roi_x4: int
     roi_y4: int
-    on_color_blue:int
+    on_color_blue: int
     on_color_green: int
     on_color_red: int
     off_color_blue: int
     off_color_green: int
     off_color_red: int
-    is_setting_disabled:bool
-    is_segment_outline_setting_enabled:bool
-    decimal_point_table:list
-    pivot_color_select:str
-    pivot_size:int
+    is_setting_disabled: bool
+    is_segment_outline_setting_enabled: bool
+    decimal_point_table: list
+    pivot_color_select: str
+    pivot_size: int
 
 
+class BaseThresholdSetting(BaseModel):
+    setting_id: str
+    is_alert: bool
+    abnormal_low_th: float
+    alert_low_th: float
+    alert_high_th: float
+    abnormal_high_th: float
 
 
-
-
-
+class UIThresholdSetting(BaseThresholdSetting):
+    setting_name:Optional[str]

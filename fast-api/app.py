@@ -5,6 +5,8 @@ import io
 import os
 import sys
 
+import utils
+
 sys.path.append('/home/pi/.local/lib/python3.9/site-packages')
 
 # サードパーティーライブラリ
@@ -12,23 +14,23 @@ import cv2
 from fastapi import FastAPI, Request, Depends, HTTPException, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, Session
 from starlette.middleware.cors import CORSMiddleware
 import uvicorn
 
 # 自作モジュール
 import config
-import crud
-from db_model import Base, CameraSetting,OCRSetting
-from data_schema import UICameraSetting, CameraSettingResponse, DBCameraSetting, CameraSettingCheckResponse, \
-    SettingImageResponse,UIOCRSetting,UIOCRSetting2
+from db_models import Base, DBCameraSetting, DBOCRSetting
+from data_schema import UICameraSetting, CameraSettingResponse, BaseCameraSetting, CameraSettingCheckResponse, \
+    SettingImageResponse, UIOCRSetting, UIOCRSetting2, BaseThresholdSetting,UIThresholdSetting
 from typing import Union, Literal
 from ocr import get_perspective_image
+from models import CameraSetting, OCRSetting, ThresholdSetting
 
 # SQLAlchemyEngine の作成
 CONNECT_STR = '{}://{}:{}@{}:{}/{}'.format(config.DATABASE, config.USER, config.PASSWORD, config.HOST, config.PORT,
-                                       config.DB_NAME)
+                                           config.DB_NAME)
 """   
 engine = create_engine(
     CONNECT_STR,
@@ -45,6 +47,14 @@ Base.metadata.create_all(bind=engine)
 """
 ユーザーインターフェース(画面)からの要求を処理するAPIを定義
 """
+
+
+# SQLiteに接続するたびに外部キー制約を有効にするためのリスナーを追加
+@event.listens_for(engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
 
 app = FastAPI()
 #  CORESを回避するために追加
@@ -73,6 +83,8 @@ def get_db():
     db = SessionClass()
     try:
         yield db
+    except Exception:
+        db.rollback()  # エラーがあればロールバック
     finally:
         db.close()
 
@@ -88,7 +100,7 @@ def register_camera_setting(settings: list[UICameraSetting], db: Session = Depen
     """
     print(settings)
     # 設定データをチェックし、判定データとチェックデータを取得
-    is_success, check_data_list = crud.check_camera_setting(settings)
+    is_success, check_data_list = CameraSetting.check(settings)
     # チェックNGで、チェックデータをＵＩに返却
     if not is_success:
         return CameraSettingCheckResponse(is_success=is_success, check_data=check_data_list)
@@ -96,19 +108,16 @@ def register_camera_setting(settings: list[UICameraSetting], db: Session = Depen
     for setting in settings:
         # 設定データの削除
         if setting.is_delete:
-            crud.delete_camera_setting(db, setting.usb_port)
+            CameraSetting.delete(db, setting.usb_port)
         else:
-            old_setting = db.query(CameraSetting).filter(CameraSetting.usb_port == setting.usb_port).first()
-            # 設定データがあれば、設定データをUPDATE操作
-            if old_setting is not None:
-
-                crud.update_camera_setting(db, setting)
+            if CameraSetting.is_setting_exist(db, setting):
+                CameraSetting.update(db, setting)
             # 設定データが無ければ、設定データをINSERT
             else:
-                crud.insert_camera_setting(db, setting)
+                CameraSetting.insert(db, setting)
 
     if is_success:
-        return crud.get_all_camera_setting(db)
+        return CameraSetting.get_all(db)
 
 
 @app.get("/load_camera_setting/")
@@ -118,7 +127,8 @@ def load_camera_setting(db: Session = Depends(get_db)):
     :param db:
     :return:
     """
-    return crud.get_all_camera_setting(db)
+
+    return CameraSetting.get_all(db)
 
 
 @app.get("/load_camera_setting_page_parameter/", response_model=list)
@@ -128,7 +138,8 @@ def load_camera_setting_page_parameter(db: Session = Depends(get_db)):
     :param db:
     :return:
     """
-    return crud.get_available_usb_port(db)
+
+    return CameraSetting.get_available_usb_port(db)
 
 
 @app.get("/get_camera/", response_model=list)
@@ -139,11 +150,11 @@ def get_camera(db: Session = Depends(get_db)):
     :return:
     """
 
-    return crud.get_all_camera_setting(db)
+    return CameraSetting.get_all(db)
 
 
 @app.get("/take_an_image/")
-def take_an_image(usb_port,db: Session = Depends(get_db)):
+def take_an_image(usb_port):
     """
     選択したカメラで設定用の画像を撮影する
     :param usb_port:
@@ -158,16 +169,16 @@ def take_an_image(usb_port,db: Session = Depends(get_db)):
     print(s)
     video_id=usb_device.get_video_id(s)
     """
-    video_id=0
+    video_id = 0
     if video_id is not None:
         cap = cv2.VideoCapture(video_id)
         # 画像をキャプチャする
         ret, frame = cap.read()
         if ret:
-            timestamp=crud.get_timestamp()
+            timestamp = utils.get_timestamp()
             print(timestamp)
             # 画像を保存する
-            image_directory=f"{config.SETTING_IMAGE_PATH}/{usb_port}"
+            image_directory = f"{config.SETTING_IMAGE_PATH}/{usb_port}"
             os.makedirs(image_directory, exist_ok=True)
             cv2.imwrite(f"{image_directory}/{timestamp}.jpg", frame)
         else:
@@ -177,15 +188,16 @@ def take_an_image(usb_port,db: Session = Depends(get_db)):
         return "画像の撮影に成功しました"
     return "画像の撮影に失敗しました"
 
+
 @app.get("/delete_an_image/")
-def delete_an_image(usb_port,image_name,db: Session = Depends(get_db)):
+def delete_an_image(usb_port, image_name):
     """
     選択したカメラで設定用の画像を撮影する
     :param usb_port:
     :param db:
     :return:
     """
-    print(usb_port,image_name)
+    print(usb_port, image_name)
     """
     usb_device=crud.UsbVideoDevice()
     usb_port=f"PORT_{usb_port}"
@@ -193,7 +205,7 @@ def delete_an_image(usb_port,image_name,db: Session = Depends(get_db)):
     print(s)
     video_id=usb_device.get_video_id(s)
     """
-    image_path=f"{config.SETTING_IMAGE_PATH}/{usb_port}/{image_name}"
+    image_path = f"{config.SETTING_IMAGE_PATH}/{usb_port}/{image_name}"
     try:
         os.remove(image_path)
     except FileNotFoundError:
@@ -201,9 +213,8 @@ def delete_an_image(usb_port,image_name,db: Session = Depends(get_db)):
     return "ファイルを削除しました"
 
 
-
 @app.get("/get_setting_image/")
-def get_setting_image(usb_port,db: Session = Depends(get_db)):
+def get_setting_image(usb_port):
     """
     選択したカメラで設定用の画像を撮影する
     :param usb_port:
@@ -212,27 +223,14 @@ def get_setting_image(usb_port,db: Session = Depends(get_db)):
     """
     print(usb_port)
     image_directory = f"{config.SETTING_IMAGE_PATH}/{usb_port}"
-    images=glob.glob(f"{image_directory}/*")
-    images=[image.split("\\")[1] for image in images]
+    images = glob.glob(f"{image_directory}/*")
+    images = [image.split("\\")[1] for image in images]
     print(images)
     return [SettingImageResponse(name=image, value=image) for image in images]
 
 
-@app.get("/get_new_setting/")
-def add_setting(usb_port,image,db: Session = Depends(get_db)):
-    """
-    選択したカメラで設定用の画像を撮影する
-    :param image:
-    :param usb_port:
-    :param db:
-    :return:
-    """
-    print(usb_port,image)
-    return crud.insert_ocr_setting(usb_port=usb_port,image=image,db=db)
-
-
 @app.get("/do_keystone_correction/")
-def add_setting(x1,y1,x2,y2,x3,y3,x4,y4,path,db: Session = Depends(get_db)):
+def add_setting(x1, y1, x2, y2, x3, y3, x4, y4, path):
     """
     選択したカメラで設定用の画像を撮影する
     :param image:
@@ -240,54 +238,107 @@ def add_setting(x1,y1,x2,y2,x3,y3,x4,y4,path,db: Session = Depends(get_db)):
     :param db:
     :return:
     """
-    print(x1,y1,x2,y2,x3,y3,x4,y4,path)
-    perspective_points=list(map(int,[x1,y1,x2,y2,x3,y3,x4,y4]))
-    img=cv2.imread(filename=f"{config.SETTING_IMAGE_PATH}/{path}")
-    perspective_image=get_perspective_image(array=perspective_points,img=img)
-    byte_image=crud.convert_to_byte_image(perspective_image)
-    #FastAPIのStreamingResponseを使用して画像をストリーミングレスポンスとして送信
+    print(x1, y1, x2, y2, x3, y3, x4, y4, path)
+    perspective_points = list(map(int, [x1, y1, x2, y2, x3, y3, x4, y4]))
+    img = cv2.imread(filename=f"{config.SETTING_IMAGE_PATH}/{path}")
+    perspective_image = get_perspective_image(array=perspective_points, img=img)
+    byte_image = OCRSetting.convert_to_byte_image(perspective_image)
+    # FastAPIのStreamingResponseを使用して画像をストリーミングレスポンスとして送信
     return StreamingResponse(io.BytesIO(byte_image), media_type="image/png")
+
 
 # uvicorn app:app --reload --host=0.0.0.0 --port=8000
 
-
 @app.post("/add_new_setting/")
-def add_new_setting(data:UIOCRSetting,db: Session = Depends(get_db)):
-    ret=""
+def add_new_setting(data: UIOCRSetting, db: Session = Depends(get_db)):
+    ret = ""
     try:
-        crud.insert_ocr_setting(db,data)
-        ret="実行に成功しました。"
+        setting_id = OCRSetting.insert(db, data)
+        setting_name = data.setting_name
+        threshold_setting = BaseThresholdSetting(
+            setting_id=setting_id,
+            is_alert=True,
+            abnormal_low_th=-100,
+            alert_low_th=-50,
+            alert_high_th=50,
+            abnormal_high_th=100
+
+        )
+        ThresholdSetting.insert(db, threshold_setting)
+        ret = "実行に成功しました。"
     except Exception:
-        ret="実行に失敗しました。"
+        ret = "実行に失敗しました。"
     finally:
         return ret
+
 
 @app.get("/setting_ids_and_names/")
 def get_setting_ids_and_names(db: Session = Depends(get_db)):
-    return crud.setting_ids_and_names(db)
+    return OCRSetting.get_setting_ids_and_names(db)
+
 
 @app.get("/get_ocr_setting/")
-def get_ocr_setting(setting_id:str,db: Session = Depends(get_db)):
-    return crud.get_ocr_setting(setting_id,db)
+def get_ocr_setting(setting_id: str, db: Session = Depends(get_db)):
+    return OCRSetting.get_all(setting_id, db)
+
 
 @app.post("/update_ocr_setting/")
-def update_ocr_setting(data:UIOCRSetting2,db: Session = Depends(get_db)):
+def update_ocr_setting(data: UIOCRSetting2, db: Session = Depends(get_db)):
     ret = ""
     try:
-        crud.update_ocr_setting(db, data)
+        OCRSetting.update(db, data)
         ret = "実行に成功しました。"
     except Exception:
         ret = "実行に失敗しました。"
     finally:
         return ret
 
+
 @app.get("/delete_ocr_setting/")
-def delete_ocr_setting(id:str,db: Session = Depends(get_db)):
+def delete_ocr_setting(id: str, db: Session = Depends(get_db)):
     ret = ""
     try:
-        crud.delete_ocr_setting(db, id)
+        OCRSetting.delete(db, id)
         ret = "実行に成功しました。"
     except Exception:
         ret = "実行に失敗しました。"
     finally:
         return ret
+
+
+@app.get("/get_threshold_setting/")
+def get_threshold_setting(db: Session = Depends(get_db)):
+    print(ThresholdSetting.get_all(db))
+    threshold_settings=ThresholdSetting.get_all(db)
+    ret=[]
+    for threshold_setting in threshold_settings:
+        print(threshold_setting.setting_id)
+        setting_name=OCRSetting.get_all(threshold_setting.setting_id,db).setting_name
+        print(OCRSetting.get_all(threshold_setting.setting_id,db))
+        ui_threshold_setting=UIThresholdSetting(
+            setting_id=threshold_setting.setting_id,
+            setting_name=setting_name,
+            is_alert=threshold_setting.is_alert,
+            abnormal_low_th=threshold_setting.abnormal_low_th,
+            alert_low_th=threshold_setting.alert_low_th,
+            alert_high_th=threshold_setting.alert_high_th,
+            abnormal_high_th=threshold_setting.abnormal_high_th
+        )
+        ret.append(ui_threshold_setting)
+    return ret
+
+@app.post("/register_threshold_setting/")
+def register_camera_setting(settings: list[UIThresholdSetting], db: Session = Depends(get_db)):
+    print(settings)
+    ret = ""
+    try:
+        # チェックＯＫでCRUD操作
+        for setting in settings:
+            ThresholdSetting.update(db, setting)
+        ret = "実行に成功しました。"
+    except Exception:
+        ret="実行に失敗しました"
+    finally:
+        return ret
+
+
