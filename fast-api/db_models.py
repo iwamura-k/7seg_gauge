@@ -38,6 +38,8 @@ class DBOCRSetting(Base):
     is_setting_disabled = Column(Boolean)
     pivot_color = Column(String)
     pivot_size = Column(Integer)
+    # 親テーブルとのリレーションシップを設定（オプショナル）
+    parent = relationship("DBCameraSetting", back_populates="children")
 
 
 class DBThresholdSetting(Base):
@@ -53,3 +55,4 @@ class DBThresholdSetting(Base):
 
 # 親テーブルに子テーブルとのリレーションシップを追加（オプショナル）
 DBOCRSetting.children = relationship("DBThresholdSetting", back_populates="parent", cascade="all, delete")
+DBCameraSetting.children = relationship("DBOCRSetting", back_populates="parent", cascade="all, delete")
