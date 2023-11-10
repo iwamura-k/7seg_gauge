@@ -2,9 +2,9 @@ import json
 import uuid
 
 from sqlalchemy.orm import Session
-from db_models import DBCameraSetting, DBOCRSetting, DBThresholdSetting
+from db_models import DBCameraSetting, DBOCRSetting, DBThresholdSetting,ReceiverMailAddresses
 from data_schema import UICameraSetting, CameraSettingCheck, USBPortResponse, UIOCRSetting, UIOCRSetting2, \
-    CameraSettingResponse,BaseThresholdSetting,UIThresholdSetting
+    CameraSettingResponse,BaseThresholdSetting,UIThresholdSetting,UIReceiverSetting,UIReceiverSettingResponse
 import config
 import cv2
 
@@ -301,3 +301,74 @@ class ThresholdSetting:
         """
         # print(db.query(CameraSetting).all())
         return db.query(DBThresholdSetting).all()
+
+
+class JsonTextStorage:
+    def __init__(self,file_path):
+        self.file_path=file_path
+
+    def save(self,data):
+        with open(self.file_path,encoding="utf-8",mode="w") as f:
+            f.write(json.dumps(dict(data)))
+
+    def load(self):
+        with open(self.file_path,encoding="utf-8") as f:
+             data=json.load(f)
+
+        return data
+class MailSetting:
+
+    @classmethod
+    def delete(cls, db: Session, address: str):
+        """
+        引数usb_portに該当するカメラ設定を削除する
+        :param db:
+        :param usb_port:
+        :return:
+        """
+        db.query(ReceiverMailAddresses).filter(ReceiverMailAddresses.address == address).delete()
+        db.commit()
+
+    @classmethod
+    def update(cls, db: Session, setting: UIReceiverSetting):
+        """
+        データベースにあるカメラの設定データを引数settingの内容で更新する
+        :param setting:
+        :return:
+        """
+        db_setting = db.query(ReceiverMailAddresses).get(setting.address)
+        db_setting.is_disable = setting.is_disable
+        db.commit()
+        db.refresh(db_setting)
+
+    @classmethod
+    def insert(cls, db: Session, setting: UIReceiverSetting):
+        """
+        引数settingのカメラ設定データをデータベースに新規追加する
+        :param db:
+        :param setting:
+        :return:
+        """
+        new_setting = ReceiverMailAddresses(address=setting.address, is_disable=setting.is_disable)
+        db.add(new_setting)
+        db.commit()
+
+    @classmethod
+    def get_all(cls, db: Session):
+        """
+        カメラのすべての設定データを取得し、返却する
+        :param db:
+        :return:
+        """
+        # print(db.query(CameraSetting).all())
+        send_data = db.query(ReceiverMailAddresses).all()
+
+        return send_data
+
+    @classmethod
+    def is_setting_exist(cls, db: Session, setting):
+        old_setting = db.query(ReceiverMailAddresses).filter(ReceiverMailAddresses.address == setting.address).first()
+        # 設定データがあれば、設定データをUPDATE操作
+        if old_setting is not None:
+            return True
+        return False

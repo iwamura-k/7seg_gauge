@@ -17,3 +17,8 @@ USB_DEV_ID = {"PORT_1": "1.4", "PORT_2": "1.3", "PORT_3": "1.2", "PORT_4": "1.1"
 #撮影画像保存フォルダパス
 SETTING_IMAGE_PATH="./setting_images"
 
+#JSON設定ファイルのパス
+JSON_SETTING_FILE_DIR="./json_settings"
+#メールアドレス設定の保存ファイルパス
+MAIL_SETTING_PATH=f"{JSON_SETTING_FILE_DIR}/mail_settings.json"
+

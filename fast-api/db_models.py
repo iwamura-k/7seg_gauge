@@ -53,6 +53,12 @@ class DBThresholdSetting(Base):
     # 親テーブルとのリレーションシップを設定（オプショナル）
     parent = relationship("DBOCRSetting", back_populates="children")
 
+
+class ReceiverMailAddresses(Base):
+    __tablename__ = "reciever_mail_addresses"
+    address=Column(String, primary_key=True, index=True)
+    is_disable=Column(Boolean)
+
 # 親テーブルに子テーブルとのリレーションシップを追加（オプショナル）
 DBOCRSetting.children = relationship("DBThresholdSetting", back_populates="parent", cascade="all, delete")
 DBCameraSetting.children = relationship("DBOCRSetting", back_populates="parent", cascade="all, delete")

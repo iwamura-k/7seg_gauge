@@ -139,3 +139,34 @@ class BaseThresholdSetting(BaseModel):
 
 class UIThresholdSetting(BaseThresholdSetting):
     setting_name:Optional[str]
+
+
+class UISenderSetting(BaseModel):
+    smtp_server: str
+    smtp_port: str
+    sender_address: str
+    sender_password: str
+
+class UIReceiverSetting(BaseModel):
+    address:str
+    is_disable:bool
+    is_delete:bool
+
+
+class UIMailSetting(BaseModel):
+    sender_setting:UISenderSetting
+    receiver_setting:list[UIReceiverSetting]
+
+class UIReceiverSettingResponse(BaseModel):
+    address:str
+    is_disable:bool
+
+    class Config:
+        orm_mode = True
+
+class UIMailSettingResponse(BaseModel):
+    sender_setting:UISenderSetting
+    receiver_setting:list[UIReceiverSettingResponse]
+
+    class Config:
+        orm_mode = True

@@ -23,10 +23,10 @@ import uvicorn
 import config
 from db_models import Base, DBCameraSetting, DBOCRSetting
 from data_schema import UICameraSetting, CameraSettingResponse, BaseCameraSetting, CameraSettingCheckResponse, \
-    SettingImageResponse, UIOCRSetting, UIOCRSetting2, BaseThresholdSetting,UIThresholdSetting
+    SettingImageResponse, UIOCRSetting, UIOCRSetting2, BaseThresholdSetting,UIThresholdSetting,UIMailSetting,UIMailSettingResponse
 from typing import Union, Literal
 from ocr import get_perspective_image
-from models import CameraSetting, OCRSetting, ThresholdSetting
+from models import CameraSetting, OCRSetting, ThresholdSetting,JsonTextStorage,MailSetting
 
 # SQLAlchemyEngine の作成
 CONNECT_STR = '{}://{}:{}@{}:{}/{}'.format(config.DATABASE, config.USER, config.PASSWORD, config.HOST, config.PORT,
@@ -341,4 +341,37 @@ def register_camera_setting(settings: list[UIThresholdSetting], db: Session = De
     finally:
         return ret
 
+
+@app.post("/register_mail_settings/")
+def register_reciever_mail_setting(settings:  UIMailSetting, db: Session = Depends(get_db)):
+    print(settings)
+    ret=""
+
+    os.makedirs(config.JSON_SETTING_FILE_DIR, exist_ok=True)
+    json_storage=JsonTextStorage(file_path=config.MAIL_SETTING_PATH)
+    json_storage.save(settings.sender_setting)
+
+
+    for setting in settings.receiver_setting:
+        # 設定データの削除
+        print(setting.address)
+        if setting.is_delete:
+            MailSetting.delete(db, setting.address)
+        else:
+            if MailSetting.is_setting_exist(db, setting):
+                MailSetting.update(db, setting)
+            # 設定データが無ければ、設定データをINSERT
+            else:
+                print("insert")
+                MailSetting.insert(db, setting)
+
+    return ret
+
+@app.get("/get_mail_setting/")
+def get_mail_setting(db: Session = Depends(get_db)):
+
+    json_storage = JsonTextStorage(file_path=config.MAIL_SETTING_PATH)
+    receiver_setting=MailSetting.get_all(db)
+    sender_setting=json_storage.load()
+    return UIMailSettingResponse(receiver_setting=receiver_setting,sender_setting=sender_setting)
 
