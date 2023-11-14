@@ -146,6 +146,8 @@ class UISenderSetting(BaseModel):
     smtp_port: str
     sender_address: str
     sender_password: str
+    class Config:
+        orm_mode = True
 
 class UIReceiverSetting(BaseModel):
     address:str
@@ -166,7 +168,7 @@ class UIReceiverSettingResponse(BaseModel):
 
 class UIMailSettingResponse(BaseModel):
     sender_setting:UISenderSetting
-    receiver_setting:list[UIReceiverSettingResponse]
+    receiver_setting:list[dict]
 
     class Config:
         orm_mode = True

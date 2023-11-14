@@ -23,11 +23,12 @@ import uvicorn
 import config
 from db_models import Base, DBCameraSetting, DBOCRSetting
 from data_schema import UICameraSetting, CameraSettingResponse, BaseCameraSetting, CameraSettingCheckResponse, \
-    SettingImageResponse, UIOCRSetting, UIOCRSetting2, BaseThresholdSetting,UIThresholdSetting,UIMailSetting,UIMailSettingResponse
+    SettingImageResponse, UIOCRSetting, UIOCRSetting2, BaseThresholdSetting, UIThresholdSetting, UIMailSetting, \
+    UIMailSettingResponse
 from typing import Union, Literal
 from ocr import get_perspective_image
-from models import CameraSetting, OCRSetting, ThresholdSetting,JsonTextStorage,MailSetting
-
+from models import CameraSetting, OCRSetting, ThresholdSetting, JsonTextStorage, MailSetting
+from camera import UsbVideoDevice,UsbHub,UsbCamera,create_camera
 # SQLAlchemyEngine の作成
 CONNECT_STR = '{}://{}:{}@{}:{}/{}'.format(config.DATABASE, config.USER, config.PASSWORD, config.HOST, config.PORT,
                                            config.DB_NAME)
@@ -55,6 +56,7 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA foreign_keys=ON")
     cursor.close()
+
 
 app = FastAPI()
 #  CORESを回避するために追加
@@ -162,31 +164,19 @@ def take_an_image(usb_port):
     :return:
     """
     print(usb_port)
-    """
-    usb_device=crud.UsbVideoDevice()
-    usb_port=f"PORT_{usb_port}"
-    s = config.USB_DEV_ID[usb_port]
-    print(s)
-    video_id=usb_device.get_video_id(s)
-    """
-    video_id = 0
-    if video_id is not None:
-        cap = cv2.VideoCapture(video_id)
-        # 画像をキャプチャする
-        ret, frame = cap.read()
-        if ret:
-            timestamp = utils.get_timestamp()
-            print(timestamp)
-            # 画像を保存する
-            image_directory = f"{config.SETTING_IMAGE_PATH}/{usb_port}"
-            os.makedirs(image_directory, exist_ok=True)
-            cv2.imwrite(f"{image_directory}/{timestamp}.jpg", frame)
-        else:
-            return "画像の撮影に失敗しました"
-        # カメラを閉じる
-        cap.release()
+    camera=create_camera(config.CameraType.USB,port=usb_port,fps=config.FPS,buffer_size=1)
+    frame=camera.get_image()
+    if frame is not None:
+        timestamp = utils.get_timestamp()
+        print(timestamp)
+        # 画像を保存する
+        image_directory = f"{config.SETTING_IMAGE_PATH}/PORT_{usb_port}"
+        os.makedirs(image_directory, exist_ok=True)
+        cv2.imwrite(f"{image_directory}/{timestamp}.jpg", frame)
         return "画像の撮影に成功しました"
-    return "画像の撮影に失敗しました"
+    else:
+        return "画像の撮影に失敗しました"
+
 
 
 @app.get("/delete_an_image/")
@@ -198,14 +188,10 @@ def delete_an_image(usb_port, image_name):
     :return:
     """
     print(usb_port, image_name)
-    """
-    usb_device=crud.UsbVideoDevice()
-    usb_port=f"PORT_{usb_port}"
-    s = config.USB_DEV_ID[usb_port]
+    s = config.USB_PORT_MAPPING[usb_port]
     print(s)
-    video_id=usb_device.get_video_id(s)
-    """
-    image_path = f"{config.SETTING_IMAGE_PATH}/{usb_port}/{image_name}"
+
+    image_path = f"{config.SETTING_IMAGE_PATH}/PORT_{usb_port}/{image_name}"
     try:
         os.remove(image_path)
     except FileNotFoundError:
@@ -222,9 +208,10 @@ def get_setting_image(usb_port):
     :return:
     """
     print(usb_port)
-    image_directory = f"{config.SETTING_IMAGE_PATH}/{usb_port}"
+    image_directory = f"{config.SETTING_IMAGE_PATH}/PORT_{usb_port}"
     images = glob.glob(f"{image_directory}/*")
-    images = [image.split("\\")[1] for image in images]
+    print(images)
+    images = [image.split("/")[-1] for image in images]
     print(images)
     return [SettingImageResponse(name=image, value=image) for image in images]
 
@@ -240,6 +227,8 @@ def add_setting(x1, y1, x2, y2, x3, y3, x4, y4, path):
     """
     print(x1, y1, x2, y2, x3, y3, x4, y4, path)
     perspective_points = list(map(int, [x1, y1, x2, y2, x3, y3, x4, y4]))
+    path=path.replace("%2F","/")
+    print(f"{config.SETTING_IMAGE_PATH}/{path}")
     img = cv2.imread(filename=f"{config.SETTING_IMAGE_PATH}/{path}")
     perspective_image = get_perspective_image(array=perspective_points, img=img)
     byte_image = OCRSetting.convert_to_byte_image(perspective_image)
@@ -279,7 +268,7 @@ def get_setting_ids_and_names(db: Session = Depends(get_db)):
 
 @app.get("/get_ocr_setting/")
 def get_ocr_setting(setting_id: str, db: Session = Depends(get_db)):
-    return OCRSetting.get_all(setting_id, db)
+    return OCRSetting.get(setting_id, db)
 
 
 @app.post("/update_ocr_setting/")
@@ -309,13 +298,13 @@ def delete_ocr_setting(id: str, db: Session = Depends(get_db)):
 @app.get("/get_threshold_setting/")
 def get_threshold_setting(db: Session = Depends(get_db)):
     print(ThresholdSetting.get_all(db))
-    threshold_settings=ThresholdSetting.get_all(db)
-    ret=[]
+    threshold_settings = ThresholdSetting.get_all(db)
+    ret = []
     for threshold_setting in threshold_settings:
         print(threshold_setting.setting_id)
-        setting_name=OCRSetting.get_all(threshold_setting.setting_id,db).setting_name
-        print(OCRSetting.get_all(threshold_setting.setting_id,db))
-        ui_threshold_setting=UIThresholdSetting(
+        setting_name = OCRSetting.get(threshold_setting.setting_id, db).setting_name
+        print(OCRSetting.get(threshold_setting.setting_id, db))
+        ui_threshold_setting = UIThresholdSetting(
             setting_id=threshold_setting.setting_id,
             setting_name=setting_name,
             is_alert=threshold_setting.is_alert,
@@ -327,6 +316,7 @@ def get_threshold_setting(db: Session = Depends(get_db)):
         ret.append(ui_threshold_setting)
     return ret
 
+
 @app.post("/register_threshold_setting/")
 def register_camera_setting(settings: list[UIThresholdSetting], db: Session = Depends(get_db)):
     print(settings)
@@ -337,20 +327,19 @@ def register_camera_setting(settings: list[UIThresholdSetting], db: Session = De
             ThresholdSetting.update(db, setting)
         ret = "実行に成功しました。"
     except Exception:
-        ret="実行に失敗しました"
+        ret = "実行に失敗しました"
     finally:
         return ret
 
 
 @app.post("/register_mail_settings/")
-def register_reciever_mail_setting(settings:  UIMailSetting, db: Session = Depends(get_db)):
+def register_reciever_mail_setting(settings: UIMailSetting, db: Session = Depends(get_db)):
     print(settings)
-    ret=""
+    ret = ""
 
     os.makedirs(config.JSON_SETTING_FILE_DIR, exist_ok=True)
-    json_storage=JsonTextStorage(file_path=config.MAIL_SETTING_PATH)
+    json_storage = JsonTextStorage(file_path=config.MAIL_SETTING_PATH)
     json_storage.save(settings.sender_setting)
-
 
     for setting in settings.receiver_setting:
         # 設定データの削除
@@ -367,11 +356,16 @@ def register_reciever_mail_setting(settings:  UIMailSetting, db: Session = Depen
 
     return ret
 
+
 @app.get("/get_mail_setting/")
 def get_mail_setting(db: Session = Depends(get_db)):
-
     json_storage = JsonTextStorage(file_path=config.MAIL_SETTING_PATH)
-    receiver_setting=MailSetting.get_all(db)
-    sender_setting=json_storage.load()
-    return UIMailSettingResponse(receiver_setting=receiver_setting,sender_setting=sender_setting)
+    print("ok")
+    receiver_setting = MailSetting.get_all(db)
+    print(receiver_setting[0].address,receiver_setting[0].is_disable)
+    sender_setting = json_storage.load()
+    return {"receiver_setting":receiver_setting, "sender_setting":sender_setting}
 
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)

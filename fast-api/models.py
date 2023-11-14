@@ -2,14 +2,17 @@ import json
 import uuid
 
 from sqlalchemy.orm import Session
-from db_models import DBCameraSetting, DBOCRSetting, DBThresholdSetting,ReceiverMailAddresses
+from db_models import DBCameraSetting, DBOCRSetting, DBThresholdSetting, ReceiverMailAddresses
 from data_schema import UICameraSetting, CameraSettingCheck, USBPortResponse, UIOCRSetting, UIOCRSetting2, \
-    CameraSettingResponse,BaseThresholdSetting,UIThresholdSetting,UIReceiverSetting,UIReceiverSettingResponse
+    CameraSettingResponse, BaseThresholdSetting, UIThresholdSetting, UIReceiverSetting, UIReceiverSettingResponse
 import config
 import cv2
 
 
 class CameraSetting:
+    """
+    システム画面のカメラ登録機能
+    """
 
     @classmethod
     def check(cls, settings: list[UICameraSetting]):
@@ -107,6 +110,13 @@ class CameraSetting:
 
     @classmethod
     def is_setting_exist(cls, db: Session, setting):
+        """
+        引数の設定データのＩＤがテーブルに存在する場合はTrue、存在しない場合はTrueを返す
+
+        :param db:
+        :param setting:
+        :return:
+        """
         old_setting = db.query(DBCameraSetting).filter(DBCameraSetting.usb_port == setting.usb_port).first()
         # 設定データがあれば、設定データをUPDATE操作
         if old_setting is not None:
@@ -115,9 +125,17 @@ class CameraSetting:
 
 
 class OCRSetting:
+    """
+    システム画面のOCR設定機能
+    """
 
     @classmethod
     def convert_to_byte_image(cls, image):
+        """
+        画像をバイト文字列に変換して、返す
+        :param image:
+        :return:
+        """
         # バイナリデータに変換
         _, img_encoded = cv2.imencode('.png', image)
         return img_encoded.tobytes()
@@ -125,7 +143,7 @@ class OCRSetting:
     @classmethod
     def insert(cls, db: Session, setting: UIOCRSetting):
         """
-        引数settingのカメラ設定データをデータベースに新規追加する
+        引数settingのOCR設定データをデータベースに新規追加する
         :param db:
         :param setting:
         :return:
@@ -138,7 +156,7 @@ class OCRSetting:
             {"b": setting.on_color_blue, "g": setting.on_color_green, "r": setting.on_color_red})
         segment_off_color = json.dumps(
             {"b": setting.off_color_blue, "g": setting.off_color_green, "r": setting.off_color_red})
-        setting_id=str(uuid.uuid4())
+        setting_id = str(uuid.uuid4())
         new_setting = DBOCRSetting(id=setting_id,
                                    camera_port=setting.camera_port,
                                    setting_image=setting.image_name,
@@ -162,9 +180,13 @@ class OCRSetting:
         db.flush()
         return setting_id
 
-
     @classmethod
     def get_setting_ids_and_names(cls, db: Session):
+        """
+        設定IDと設定名のペアのリスト一覧をデータベースから取得し、返す
+        :param db:
+        :return:
+        """
         temps = db.query(DBOCRSetting.id, DBOCRSetting.setting_name).all()
         send_data = []
         for temp in temps:
@@ -172,9 +194,15 @@ class OCRSetting:
 
         return send_data
 
-
     @classmethod
-    def get_all(cls, setting_id: str, db: Session):
+    def get(cls, setting_id: str, db: Session):
+        """
+        引数setting_idに該当する設定をデータベースから取得し、返す
+
+        :param setting_id:
+        :param db:
+        :return:
+        """
         setting = db.query(DBOCRSetting).filter(DBOCRSetting.id == setting_id).all()[0]
         print(setting)
         send_data = UIOCRSetting(
@@ -210,6 +238,12 @@ class OCRSetting:
 
     @classmethod
     def update(cls, db: Session, setting: UIOCRSetting2):
+        """
+        引数settingの内容で、データを上書き
+        :param db:
+        :param setting:
+        :return:
+        """
         perspective_transformation_setting = json.dumps([setting.roi_x1, setting.roi_y1, setting.roi_x2, setting.roi_y2,
                                                          setting.roi_x3, setting.roi_y3, setting.roi_x4,
                                                          setting.roi_y4])
@@ -243,7 +277,7 @@ class OCRSetting:
     @classmethod
     def delete(cls, db: Session, setting_id: str):
         """
-        引数usb_portに該当するカメラ設定を削除する
+        引数setting_idに該当するOCR設定を削除する
         :param db:
         :param usb_port:
         :return:
@@ -257,7 +291,7 @@ class ThresholdSetting:
     @classmethod
     def update(cls, db: Session, setting: UIThresholdSetting):
         """
-        データベースにあるカメラの設定データを引数settingの内容で更新する
+        データベースにある閾値の設定データを引数settingの内容で更新する
         :param setting:
         :return:
         """
@@ -272,9 +306,9 @@ class ThresholdSetting:
         db.refresh(db_setting)
 
     @classmethod
-    def insert(cls, db: Session, setting:BaseThresholdSetting):
+    def insert(cls, db: Session, setting: BaseThresholdSetting):
         """
-        引数settingのカメラ設定データをデータベースに新規追加する
+        引数settingの閾値設定データをデータベースに新規追加する
         :param db:
         :param setting:
         :return:
@@ -283,19 +317,18 @@ class ThresholdSetting:
             setting_id=setting.setting_id,
             is_alert=setting.is_alert,
             abnormal_low_th=setting.abnormal_low_th,
-            alert_low_th = setting.alert_low_th,
-            alert_high_th = setting.alert_high_th,
-            abnormal_high_th = setting.abnormal_high_th
+            alert_low_th=setting.alert_low_th,
+            alert_high_th=setting.alert_high_th,
+            abnormal_high_th=setting.abnormal_high_th
         )
 
         db.add(new_setting)
         db.commit()
 
-
     @classmethod
     def get_all(cls, db: Session):
         """
-        カメラのすべての設定データを取得し、返却する
+        すべての閾値設定データを取得し、返却する
         :param db:
         :return:
         """
@@ -304,24 +337,33 @@ class ThresholdSetting:
 
 
 class JsonTextStorage:
-    def __init__(self,file_path):
-        self.file_path=file_path
+    """
+    テキストファイルにJSONデータを保存、読み込みするクラス
+    """
 
-    def save(self,data):
-        with open(self.file_path,encoding="utf-8",mode="w") as f:
+    def __init__(self, file_path):
+        self.file_path = file_path
+
+    def save(self, data):
+        with open(self.file_path, encoding="utf-8", mode="w") as f:
             f.write(json.dumps(dict(data)))
 
     def load(self):
-        with open(self.file_path,encoding="utf-8") as f:
-             data=json.load(f)
+        with open(self.file_path, encoding="utf-8") as f:
+            data = json.load(f)
 
         return data
+
+
 class MailSetting:
+    """
+    システムのメール送信設定画面
+    """
 
     @classmethod
     def delete(cls, db: Session, address: str):
         """
-        引数usb_portに該当するカメラ設定を削除する
+        引数addressに該当する受信者アドレス設定を削除する
         :param db:
         :param usb_port:
         :return:
@@ -332,7 +374,7 @@ class MailSetting:
     @classmethod
     def update(cls, db: Session, setting: UIReceiverSetting):
         """
-        データベースにあるカメラの設定データを引数settingの内容で更新する
+        データベースにある受信者アドレスの設定データを引数settingの内容で更新する
         :param setting:
         :return:
         """
@@ -344,7 +386,7 @@ class MailSetting:
     @classmethod
     def insert(cls, db: Session, setting: UIReceiverSetting):
         """
-        引数settingのカメラ設定データをデータベースに新規追加する
+        引数settingの受信者アドレス設定データをデータベースに新規追加する
         :param db:
         :param setting:
         :return:
@@ -356,17 +398,24 @@ class MailSetting:
     @classmethod
     def get_all(cls, db: Session):
         """
-        カメラのすべての設定データを取得し、返却する
+        すべての受信者アドレス設定データを取得し、返却する
         :param db:
         :return:
         """
         # print(db.query(CameraSetting).all())
         send_data = db.query(ReceiverMailAddresses).all()
-
+        print(send_data)
+        
         return send_data
 
     @classmethod
     def is_setting_exist(cls, db: Session, setting):
+        """
+        引数settingの受信者アドレス設定データがデータベースに存在する場合は、True,そうでなければFalseを返す
+        :param db:
+        :param setting:
+        :return:
+        """
         old_setting = db.query(ReceiverMailAddresses).filter(ReceiverMailAddresses.address == setting.address).first()
         # 設定データがあれば、設定データをUPDATE操作
         if old_setting is not None:

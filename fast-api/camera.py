@@ -1,25 +1,67 @@
 import subprocess
 import config
 import cv2
+import abc
 
 
-class UsbCamera:
+def create_camera(camera_type, **kwargs):
+    if camera_type == config.CameraType.USB:
+        return UsbCamera(**kwargs)
 
-    def __init__(self, port):
+
+class Camera(metaclass=abc.ABCMeta):
+    @abc.abstractmethod
+    def get_image(self):
+        pass
+
+
+class UsbCamera(Camera):
+
+    def __init__(self, port, fps, buffer_size):
         self.port = port
+        self.fps = fps
+        self.buffer_size = buffer_size
 
-    def take_photo(self):
-        usb_device = UsbVideoDevice()
-        usb_port = f"PORT_{self.port}"
-        s = config.USB_DEV_ID[usb_port]
-        print(s)
-        video_id = usb_device.get_video_id(s)
+    def _get_cap(self):
+        video_id = self._get_video_id()
         if video_id is not None:
             cap = cv2.VideoCapture(video_id)
             # 画像をキャプチャする
-            ret, frame = cap.read()
-            if ret:
-                return frame
+            cap.set(cv2.CAP_PROP_FPS, self.fps)
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, self.buffer_size)
+            return cap
+        return None
+
+    def _get_video_id(self):
+        usb_hub = UsbHub(mapping=config.USB_PORT_MAPPING)
+        port_id = usb_hub.get_port_id(self.port)
+        usb_video_device = UsbVideoDevice()
+        return usb_video_device.get_video_id(port_id)
+
+    @staticmethod
+    def _get_image(cap):
+        ret, frame = cap.read()
+        if ret:
+            return frame
+        return None
+
+    def get_image(self):
+        cap = self._get_cap()
+        if cap is None:
+            return None
+        image = None
+        for i in range(self.fps):
+            image = self._get_image(cap)
+        cap.release()
+        return image
+
+
+class UsbHub:
+    def __init__(self, mapping):
+        self.mapping = mapping
+
+    def get_port_id(self, port):
+        return self.mapping[port]
 
 
 class UsbVideoDevice():
