@@ -26,7 +26,7 @@ from data_schema import UICameraSetting, CameraSettingResponse, BaseCameraSettin
     SettingImageResponse, UIOCRSetting, UIOCRSetting2, BaseThresholdSetting, UIThresholdSetting, UIMailSetting, \
     UIMailSettingResponse
 from typing import Union, Literal
-from ocr import get_perspective_image
+from ocr import get_perspective_image,load_image,OCRHandlerFactory
 from models import CameraSetting, OCRSetting, ThresholdSetting, JsonTextStorage, MailSetting
 from camera import UsbVideoDevice,UsbHub,UsbCamera,create_camera
 # SQLAlchemyEngine の作成
@@ -85,7 +85,8 @@ def get_db():
     db = SessionClass()
     try:
         yield db
-    except Exception:
+    except Exception as e:
+        print(e)
         db.rollback()  # エラーがあればロールバック
     finally:
         db.close()
@@ -187,9 +188,8 @@ def delete_an_image(usb_port, image_name):
     :param db:
     :return:
     """
-    print(usb_port, image_name)
+
     s = config.USB_PORT_MAPPING[usb_port]
-    print(s)
 
     image_path = f"{config.SETTING_IMAGE_PATH}/PORT_{usb_port}/{image_name}"
     try:
@@ -211,7 +211,8 @@ def get_setting_image(usb_port):
     image_directory = f"{config.SETTING_IMAGE_PATH}/PORT_{usb_port}"
     images = glob.glob(f"{image_directory}/*")
     print(images)
-    images = [image.split("/")[-1] for image in images]
+    #images = [image.split("/")[-1] for image in images]
+    images = [image.split("\\")[-1] for image in images]
     print(images)
     return [SettingImageResponse(name=image, value=image) for image in images]
 
@@ -230,7 +231,7 @@ def add_setting(x1, y1, x2, y2, x3, y3, x4, y4, path):
     path=path.replace("%2F","/")
     print(f"{config.SETTING_IMAGE_PATH}/{path}")
     img = cv2.imread(filename=f"{config.SETTING_IMAGE_PATH}/{path}")
-    perspective_image = get_perspective_image(array=perspective_points, img=img)
+    perspective_image = get_perspective_image(perspective_points, img)
     byte_image = OCRSetting.convert_to_byte_image(perspective_image)
     # FastAPIのStreamingResponseを使用して画像をストリーミングレスポンスとして送信
     return StreamingResponse(io.BytesIO(byte_image), media_type="image/png")
@@ -255,7 +256,8 @@ def add_new_setting(data: UIOCRSetting, db: Session = Depends(get_db)):
         )
         ThresholdSetting.insert(db, threshold_setting)
         ret = "実行に成功しました。"
-    except Exception:
+    except Exception as e:
+        print(e)
         ret = "実行に失敗しました。"
     finally:
         return ret
@@ -365,6 +367,20 @@ def get_mail_setting(db: Session = Depends(get_db)):
     print(receiver_setting[0].address,receiver_setting[0].is_disable)
     sender_setting = json_storage.load()
     return {"receiver_setting":receiver_setting, "sender_setting":sender_setting}
+
+
+@app.get("/test_ocr_setting/")
+def test_ocr_setting(usb_port:str,image:str,setting_id:str,db: Session = Depends(get_db)):
+    print(usb_port,image,setting_id)
+    ocr_handler = OCRHandlerFactory().create_ocr_handler(setting_id=setting_id)
+    image_path = f"{config.SETTING_IMAGE_PATH}/PORT_{usb_port}/{image}"
+    image=load_image(image_path)
+    ocr_string = ocr_handler.image_to_string(image)
+    return ocr_string
+
+
+
+
 
 
 if __name__ == "__main__":

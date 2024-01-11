@@ -7,6 +7,7 @@ from data_schema import UICameraSetting, CameraSettingCheck, USBPortResponse, UI
     CameraSettingResponse, BaseThresholdSetting, UIThresholdSetting, UIReceiverSetting, UIReceiverSettingResponse
 import config
 import cv2
+from schema import Coordinate
 
 
 class CameraSetting:
@@ -141,7 +142,7 @@ class OCRSetting:
         return img_encoded.tobytes()
 
     @classmethod
-    def insert(cls, db: Session, setting: UIOCRSetting):
+    def insert(cls, db: Session, setting):
         """
         引数settingのOCR設定データをデータベースに新規追加する
         :param db:
@@ -157,6 +158,12 @@ class OCRSetting:
         segment_off_color = json.dumps(
             {"b": setting.off_color_blue, "g": setting.off_color_green, "r": setting.off_color_red})
         setting_id = str(uuid.uuid4())
+        recognition_points = cls.get_recognition_points(setting.segment_point_table)
+        print(f"recognition_points:{recognition_points}")
+        decimal_points = setting.decimal_point_table
+        decimal_exponents = cls.get_decimal_exponents(decimal_points, recognition_points)
+        print(decimal_exponents)
+
         new_setting = DBOCRSetting(id=setting_id,
                                    camera_port=setting.camera_port,
                                    setting_image=setting.image_name,
@@ -172,8 +179,9 @@ class OCRSetting:
                                    decimal_point_setting=json.dumps(setting.decimal_point_table),
                                    is_setting_disabled=setting.is_setting_disabled,
                                    pivot_color=setting.pivot_color_select,
-                                   pivot_size=int(setting.pivot_size)
-
+                                   pivot_size=int(setting.pivot_size),
+                                   segment_recognition_points=json.dumps(recognition_points),
+                                   decimal_exponents=json.dumps(decimal_exponents)
                                    )
 
         db.add(new_setting)
@@ -237,7 +245,7 @@ class OCRSetting:
         return send_data
 
     @classmethod
-    def update(cls, db: Session, setting: UIOCRSetting2):
+    def update(cls, db: Session, setting):
         """
         引数settingの内容で、データを上書き
         :param db:
@@ -253,6 +261,10 @@ class OCRSetting:
         segment_off_color = json.dumps(
             {"b": setting.off_color_blue, "g": setting.off_color_green, "r": setting.off_color_red})
 
+        recognition_points = cls.get_recognition_points(setting.segment_point_table)
+        decimal_points = setting.decimal_point_table
+        decimal_exponents = cls.get_decimal_exponents(decimal_points, recognition_points)
+        print(decimal_exponents)
         db_setting: DBOCRSetting = db.query(DBOCRSetting).get(setting.setting_id)
 
         db_setting.camera_port = setting.camera_port
@@ -270,7 +282,8 @@ class OCRSetting:
         db_setting.segment_point_setting = json.dumps(setting.segment_point_table)
         db_setting.segment_region_settings = json.dumps(setting.segment_region_table)
         db_setting.setting_image = setting.image_name
-
+        db_setting.segment_recognition_points = json.dumps(recognition_points)
+        db_setting.decimal_exponents = json.dumps(decimal_exponents)
         db.commit()
         db.refresh(db_setting)
 
@@ -284,6 +297,83 @@ class OCRSetting:
         """
         db.query(DBOCRSetting).filter(DBOCRSetting.id == setting_id).delete()
         db.commit()
+
+    @classmethod
+    def calculate_recognition_points(cls, points):
+        recognition_points = []
+        for point in points:
+            upper_left_x = int(point["segment_upper_left_x"])
+            upper_left_y = int(point["segment_upper_left_y"])
+            upper_right_x = int(point["segment_upper_right_x"])
+            upper_right_y = int(point["segment_upper_right_y"])
+            lower_right_x = int(point["segment_lower_right_x"])
+            lower_right_y = int(point["segment_lower_right_y"])
+            lower_left_x = int(point["segment_lower_left_x"])
+            lower_left_y = int(point["segment_lower_left_y"])
+
+            upper_middle_x = int((upper_left_x + upper_right_x) / 2)
+            upper_middle_y = int((upper_left_y + upper_right_y) / 2)
+
+            lower_middle_x = int((lower_left_x + lower_right_x) / 2)
+            lower_middle_y = int((lower_left_y + lower_right_y) / 2)
+
+            middle_x = int((upper_middle_x + lower_middle_x) / 2)
+            middle_y = int((upper_middle_y + lower_middle_y) / 2)
+
+            r_lower_left_x = lower_left_x + int((upper_left_x - lower_left_x) / 4)
+            r_lower_left_y = lower_left_y + int((upper_left_y - lower_left_y) / 4)
+
+            r_upper_left_x = lower_left_x + int(3 * (upper_left_x - lower_left_x) / 4)
+            r_upper_left_y = lower_left_y + int(3 * (upper_left_y - lower_left_y) / 4)
+
+            r_lower_right_x = lower_right_x + int((upper_right_x - lower_right_x) / 4)
+            r_lower_right_y = lower_right_y + int((upper_right_y - lower_right_y) / 4)
+
+            r_upper_right_x = lower_right_x + int(3 * (upper_right_x - lower_right_x) / 4)
+            r_upper_right_y = lower_right_y + int(3 * (upper_right_y - lower_right_y) / 4)
+
+            upper_middle = [upper_middle_x, upper_middle_y]
+            middle = [middle_x, middle_y]
+            lower_middle = [lower_middle_x, lower_middle_y]
+            r_upper_left = [r_upper_left_x, r_upper_left_y]
+            r_lower_left = [r_lower_left_x, r_lower_left_y]
+            r_upper_right = [r_upper_right_x, r_upper_right_y]
+            r_lower_right = [r_lower_right_x, r_lower_right_y]
+
+            recognition_points.append(
+                [upper_middle, middle, lower_middle, r_upper_left, r_lower_left, r_upper_right, r_lower_right])
+        return recognition_points
+
+    @classmethod
+    def sort_recognition_points(cls, points):
+        sorted_points = sorted(points, key=lambda coord: coord[0][0])
+        return sorted_points
+
+    @classmethod
+    def get_recognition_points(cls, points):
+        recognition_points = cls.calculate_recognition_points(points)
+        sorted_recognition_points = cls.sort_recognition_points(recognition_points)
+
+        return sorted_recognition_points
+
+    @classmethod
+    def calculate_segment_exponent(cls, decimal_x, segment_points):
+        for i, segment_point in enumerate(segment_points):
+            segment_middle_x = segment_point[1][0]
+            if decimal_x < segment_middle_x:
+                return len(segment_points) - i
+        else:
+            return 0
+
+    @classmethod
+    def get_decimal_exponents(cls, decimal_points, segment_points):
+        decimal_exponents = []
+        for point in decimal_points:
+            x = int(point["decimal_x"])
+            exponent = cls.calculate_segment_exponent(x, segment_points)
+            decimal_exponents.append(exponent)
+
+        return decimal_exponents
 
 
 class ThresholdSetting:
@@ -405,7 +495,7 @@ class MailSetting:
         # print(db.query(CameraSetting).all())
         send_data = db.query(ReceiverMailAddresses).all()
         print(send_data)
-        
+
         return send_data
 
     @classmethod

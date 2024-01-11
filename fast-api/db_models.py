@@ -38,6 +38,8 @@ class DBOCRSetting(Base):
     is_setting_disabled = Column(Boolean)
     pivot_color = Column(String)
     pivot_size = Column(Integer)
+    segment_recognition_points=Column(JSON)
+    decimal_exponents=Column(JSON)
     # 親テーブルとのリレーションシップを設定（オプショナル）
     parent = relationship("DBCameraSetting", back_populates="children")
 

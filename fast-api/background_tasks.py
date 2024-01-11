@@ -41,7 +41,8 @@ def get_camera_list():
     session = SessionClass()
     port_list = session.query(DBCameraSetting.usb_port).all()
     print(port_list)
-    camera_list = [create_camera(config.CameraType.USB, port=port[0], fps=config.FPS, buffer_size=1) for port in port_list]
+    camera_list = [create_camera(config.CameraType.USB, port=port[0], fps=config.FPS, buffer_size=1) for port in
+                   port_list]
     return camera_list
 
 
@@ -54,14 +55,18 @@ class CameraImageStorage(threading.Thread):
     def run(self):
         while not self._stop_event.is_set():
             try:
+                timestamp = utils.get_timestamp()
                 for camera in self._camera_list:
                     print(camera.port)
-                    image = camera.get_image()
-                    if image is not None:
-                        timestamp = utils.get_timestamp()
-                        image_directory = f"{config.IMAGE_STORAGE_DIR}/PORT_{camera.port}"
-                        os.makedirs(image_directory, exist_ok=True)
-                        cv2.imwrite(f"{image_directory}/{timestamp}.jpg", image)
+                    image_directory = f"{config.IMAGE_STORAGE_DIR}/PORT_{camera.port}/{timestamp}"
+                    os.makedirs(image_directory, exist_ok=True)
+                    image_list = []
+                    for i in range(config.IMAGE_COUNT):
+                        image_list.append(camera.get_image())
+                        time.sleep(1)
+                    for i, image in enumerate(image_list):
+                        if image is not None:
+                            cv2.imwrite(f"{image_directory}/{i}.jpg", image)
 
                 time.sleep(config.STORE_INTERVAL_SEC)
             except Exception as e:

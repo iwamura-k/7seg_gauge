@@ -1,6 +1,6 @@
 from typing import Union, Literal, Optional
 from pydantic import BaseModel, Field
-
+import enum
 
 class DBCameraSetting(BaseModel):
     """
@@ -67,3 +67,11 @@ class SettingImageResponse(BaseModel):
 
     class Config:
         orm_mode = True
+
+class SegmentColor(enum.Enum):
+    BLACK=0
+    WHITE=1
+
+class Coordinate(BaseModel):
+    x:int
+    y:int

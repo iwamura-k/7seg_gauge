@@ -9,6 +9,7 @@ def create_camera(camera_type, **kwargs):
         return UsbCamera(**kwargs)
 
 
+
 class Camera(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def get_image(self):

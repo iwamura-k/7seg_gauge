@@ -19,7 +19,8 @@ BUFFER_SIZE=1
 STORE_INTERVAL_SEC=60
 
 # 撮影画像保存フォルダパス
-SETTING_IMAGE_PATH = "/home/pi/node-red-static/setting_images"
+#SETTING_IMAGE_PATH = "/home/pi/node-red-static/setting_images"
+SETTING_IMAGE_PATH = "./setting_images"
 
 # JSON設定ファイルのパス
 JSON_SETTING_FILE_DIR = "./json_settings"
@@ -30,3 +31,9 @@ class CameraType(Enum):
     USB=0
 
 IMAGE_STORAGE_DIR="./images"
+
+IMAGE_COUNT=10
+
+#OCR_CONFIG="-l 7seg --psm 7 --oem 1 -c tessedit_char_whitelist=-0123456789 --dpi 300"
+OCR_CONFIG="-l eng --psm 10 --oem 1 -c tessedit_char_whitelist=-0123456789 --dpi 300"
+TESSERACT_PATH=r'C:\Program Files\Tesseract-OCR\tesseract.exe'
