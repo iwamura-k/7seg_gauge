@@ -1,4 +1,6 @@
 from enum import Enum
+import os
+import sys
 # データベース接続設定
 DATABASE = 'mydb'
 USER = 'postgres'
@@ -20,20 +22,35 @@ STORE_INTERVAL_SEC=60
 
 # 撮影画像保存フォルダパス
 #SETTING_IMAGE_PATH = "/home/pi/node-red-static/setting_images"
-SETTING_IMAGE_PATH = "./setting_images"
+SETTING_IMAGE_PATH = "../files/setting_images"
 
 # JSON設定ファイルのパス
-JSON_SETTING_FILE_DIR = "./json_settings"
+JSON_SETTING_FILE_DIR = "../files/json_settings"
 # メールアドレス設定の保存ファイルパス
 MAIL_SETTING_PATH = f"{JSON_SETTING_FILE_DIR}/mail_settings.json"
 
 class CameraType(Enum):
     USB=0
 
-IMAGE_STORAGE_DIR="./images"
+IMAGE_STORAGE_DIR="../files/images"
 
 IMAGE_COUNT=10
 
 #OCR_CONFIG="-l 7seg --psm 7 --oem 1 -c tessedit_char_whitelist=-0123456789 --dpi 300"
 OCR_CONFIG="-l eng --psm 10 --oem 1 -c tessedit_char_whitelist=-0123456789 --dpi 300"
 TESSERACT_PATH=r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+
+ALERT_MAIL_DEAD_BAND_SEC=5
+ALERT_MAIL_MAX_SEND_LIMIT=500
+
+SUBJECT="test"
+
+databese_file = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'sample_db.sqlite3')
+DB_PATH=f"sqlite:///{databese_file}"
+
+TARGET_DIRECTORY='/'
+MAX_PERCENTAGE_OF_DATA=90
+MQTT_BROKER_IP="192.168.3.35"
+MQTT_BROKER_PORT=1883
+MQTT_BROWSER_TOPIC="mqtt_test"
+MQTT_KEEP_ALIVE_SEC=60

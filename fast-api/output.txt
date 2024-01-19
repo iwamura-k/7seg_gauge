@@ -1,1 +1,0 @@
-[{"timestamp": "20231120131403", "setting_id": "1aceda53-3692-4a15-a905-703ae43bba42", "value": "NaN"}, {"timestamp": "20231120131403", "setting_id": "f7c03ac3-cfe8-4cde-9220-68ebf373a0b9", "value": 6.66}]
