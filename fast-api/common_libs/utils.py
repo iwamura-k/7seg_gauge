@@ -14,3 +14,7 @@ def get_timestamp() -> str:
 def to_time_object(timestamp):
     s_format ='%Y%m%d%H%M%S'
     return datetime.datetime.strptime(timestamp, s_format)
+
+
+def to_time_string(time_object):
+    return time_object.strftime('%Y年%m月%d日%H時%M分%S秒')

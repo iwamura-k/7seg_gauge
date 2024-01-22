@@ -387,10 +387,14 @@ class OCRHandler:
         """
         best_result = []
         for tesseract_string, segment_point_string in zip(tesseract_ocr_result, segment_point_ocr_result):
-            if tesseract_string == "NaN":
+            if tesseract_string == "NaN" and segment_point_string !="NaN":
                 best_result.append(segment_point_string)
-            else:
+            elif tesseract_string!="NaN" and segment_point_string=="NaN":
                 best_result.append(tesseract_string)
+            elif tesseract_string == "NaN" and segment_point_string =="NaN":
+                best_result.append("NaN")
+            else:
+                best_result.append(segment_point_string)
         return best_result
 
     def _join_result(self, ocr_result):
@@ -418,6 +422,7 @@ class OCRHandler:
 
             ocr_string = self.select_proper_ocr_string(adaptive_ocr_string, otsu_ocr_string)
             result.append(ocr_string)
+        print(f"segment_result:{result}")
         return result
 
     def calculate_tesseract_result(self, normalized_gray_image):

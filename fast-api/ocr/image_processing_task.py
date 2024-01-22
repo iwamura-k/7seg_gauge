@@ -8,13 +8,13 @@ from watchdog.events import FileSystemEventHandler
 from watchdog.observers.polling import PollingObserver
 
 import config
-from common_libs.db_models import DBOCRSetting, DBThresholdSetting, SensorValue2, DBCameraSetting, \
-    ReceiverMailAddresses, ScopedSessionClass
+from common_libs.db_models import DBOCRSetting, DBThresholdSetting, SensorValue2, ScopedSessionClass, DBCameraSetting, \
+    ReceiverMailAddresses
 from common_libs.models import JsonTextStorage
 from common_libs.schema import Coordinate
 from common_libs import utils
 from rixiot_libs.event import ValueEventCalculator, EventPolicy
-from rixiot_libs.mail import EmailSender, EmailMessageCreator, EmailMessagePool
+from rixiot_libs.mail import EmailMessagePool, EmailMessageCreator, EmailSender
 from rixiot_libs.ocr import OCRHandler, TesseractOCREngine, SegmentOCREngine, DecimalPointOCREngine
 from rixiot_libs.mqtt_factory import MQTTClientFactory, on_connect, on_disconnect
 
@@ -145,16 +145,25 @@ class EventCalculatorFactory:
                                     abnormal_low_th=abnormal_low_th, abnormal_high_th=abnormal_high_th)
 
 
-class EventPolicyFactory:
+class FileEventHandler:
 
-    def create_event_policy(self, setting_id):
-        dead_band_sec = config.ALERT_MAIL_DEAD_BAND_SEC
-        return EventPolicy(dead_band_sec=dead_band_sec)
+    def __init__(self, directory=".", handler=FileSystemEventHandler()):
+        self.observer = PollingObserver()
+        self.handler = handler
+        self.directory = directory
 
-    def create_event_policies(self):
-        setting_ids = get_setting_ids()
-        handlers = {setting_id: self.create_event_policy(setting_id) for setting_id in setting_ids}
-        return handlers
+    def run(self):
+        self.observer.schedule(self.handler, self.directory, recursive=True)
+        self.observer.start()
+        print(f"MyWatcher Running in {self.directory}")
+        try:
+            while True:
+                time.sleep(1)
+        except:
+            self.observer.stop()
+        self.observer.join()
+        print("\nMyWatcher Terminated\n")
+
 
 
 class EmailMessageFactory:
@@ -208,25 +217,17 @@ class EmailSenderFactory:
                            subject=config.SUBJECT
                            )
 
+class EventPolicyFactory:
 
-class FileEventHandler:
+    def create_event_policy(self, setting_id):
+        dead_band_sec = config.ALERT_MAIL_DEAD_BAND_SEC
+        return EventPolicy(dead_band_sec=dead_band_sec)
 
-    def __init__(self, directory=".", handler=FileSystemEventHandler()):
-        self.observer = PollingObserver()
-        self.handler = handler
-        self.directory = directory
+    def create_event_policies(self):
+        setting_ids = get_setting_ids()
+        handlers = {setting_id: self.create_event_policy(setting_id) for setting_id in setting_ids}
+        return handlers
 
-    def run(self):
-        self.observer.schedule(self.handler, self.directory, recursive=True)
-        self.observer.start()
-        print(f"MyWatcher Running in {self.directory}")
-        try:
-            while True:
-                time.sleep(1)
-        except:
-            self.observer.stop()
-        self.observer.join()
-        print("\nMyWatcher Terminated\n")
 
 
 class OCRProcessHandler(FileSystemEventHandler):
@@ -274,7 +275,9 @@ class OCRProcessHandler(FileSystemEventHandler):
                 is_sent=is_send_alert
             )
 
-            send_message = {"ocr_value": ocr_value, "timestamp": timestamp, "event_type": event_type}
+            temp=utils.to_time_object(timestamp)
+            ui_timestamp=utils.to_time_string(temp)
+            send_message = {"setting_id":setting_id,"ocr_value": ocr_value, "timestamp": ui_timestamp, "event_type": event_type}
             self.send_message_to_browser(json.dumps(send_message))
 
             self.save(save_data)
@@ -351,3 +354,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
