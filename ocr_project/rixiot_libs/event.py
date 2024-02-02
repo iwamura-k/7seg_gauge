@@ -33,14 +33,13 @@ class ValueEventCalculator:
 
 class EventPolicy:
 
-    def __init__(self, dead_band_sec, is_valid):
+    def __init__(self, dead_band_sec):
         self.dead_band_sec = dead_band_sec
         self.retention = None
         self.event_type = None
         self.event_time = None
         self.stable_event_type = None
         self.is_send_alert = False
-        self.is_valid = is_valid
 
     def update(self, event_type, event_time):
         pre_stable_event_type = self.stable_event_type
@@ -55,6 +54,7 @@ class EventPolicy:
             return
 
         td = (event_time - self.event_time).total_seconds()
+        print(f"td:{td}")
 
         if event_type == self.event_type:
             self.retention += td
@@ -76,7 +76,7 @@ class EventPolicy:
 
     def get_event_type(self, event_type, event_time):
         self.update(event_type, event_time)
-        is_send_alert = self.is_send_alert if self.is_valid else False
+        is_send_alert = self.is_send_alert
         return self.stable_event_type, is_send_alert
 
 
@@ -84,7 +84,6 @@ if __name__ == "__main__":
     now = utils.get_time()
     td = datetime.timedelta(seconds=3)
     test_data = [["a", "abnormal", now],
-                 ["a", "abnormal", now + td],
                  ["a", "normal", now + td + td + td],
                  ["a", "abnormal", now + td + td + td + td],
                  ["a", "normal", now + td + td + td + td + td + td],

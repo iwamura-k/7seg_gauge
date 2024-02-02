@@ -57,4 +57,7 @@ class EmailMessagePool:
     def merge_to_string(self):
         return "".join(self.messages)
 
+    def clear(self):
+        self.messages = []
+
 

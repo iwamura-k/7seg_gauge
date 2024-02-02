@@ -67,9 +67,8 @@ class OCRHandlerFactory:
             decimal_point_ocr_engine=decimal_point_ocr_engine, ocr_points=ocr_points, display_region=display_region,
             segment_regions=segment_regions, on_color=on_color, off_color=off_color)
 
-
     def create_ocr_handler(self, setting_id):
-        setting=self.load_ocr_setting(setting_id)
+        setting = self.load_ocr_setting(setting_id)
         if setting.is_setting_disabled:
             return None
         ocr_points = self._calculate_ocr_points(setting_id)
@@ -89,7 +88,6 @@ class OCRHandlerFactory:
             tesseract_ocr_engine=tesseract_ocr_engine, segment_ocr_engine=segment_ocr_engine,
             decimal_point_ocr_engine=decimal_point_ocr_engine, ocr_points=ocr_points, display_region=display_region,
             segment_regions=segment_regions, on_color=on_color, off_color=off_color)
-
 
     def _load_display_region(self, setting_id):
         display_region = json.loads(self.load_ocr_setting(setting_id).perspective_transformation_setting)
@@ -227,7 +225,8 @@ class EmailSenderFactory:
 
     def load_receiver_email_address(self):
         session = ScopedSessionClass()
-        receiver_emails = [arr[0] for arr in session.query(ReceiverMailAddresses.address).filter(ReceiverMailAddresses.is_disable==False).all()]
+        receiver_emails = [arr[0] for arr in session.query(ReceiverMailAddresses.address).filter(
+            ReceiverMailAddresses.is_disable == False).all()]
         print(receiver_emails)
         return ', '.join(receiver_emails) if receiver_emails else None
 
@@ -251,13 +250,8 @@ class EmailSenderFactory:
 class EventPolicyFactory:
 
     def create_event_policy(self, setting_id):
-        session = ScopedSessionClass()
-        th_setting=session.query(DBThresholdSetting).filter(DBThresholdSetting.setting_id == setting_id).first()
-        is_valid=th_setting.is_alert
         dead_band_sec = config.ALERT_MAIL_DEAD_BAND_SEC
-
-        return EventPolicy(dead_band_sec=dead_band_sec,is_valid=is_valid)
-
+        return EventPolicy(dead_band_sec=dead_band_sec)
 
     def create_event_policies(self):
         setting_ids = get_setting_ids()
@@ -267,15 +261,17 @@ class EventPolicyFactory:
 
 class OCRProcessHandler(FileSystemEventHandler):
 
-    def __init__(self, message_pool, mqtt_client, mqtt_broker_ip, mqtt_broker_port, mqtt_keep_alive,
+    def __init__(self, event_policies, message_pool, mqtt_client, mqtt_broker_ip, mqtt_broker_port, mqtt_keep_alive,
                  mqtt_topic):
-
+        self.event_policies = event_policies,
         self.message_pool = message_pool
         self.mqtt_client = mqtt_client
         self.mqtt_broker_ip = mqtt_broker_ip
         self.mqtt_broker_port = mqtt_broker_port
         self.mqtt_keep_alive = mqtt_keep_alive
         self.mqtt_topic = mqtt_topic
+        print(self.event_policies)
+        print(type(self.event_policies))
 
     def connect_mqtt(self):
         self.mqtt_client.connect(self.mqtt_broker_ip, self.mqtt_broker_port, self.mqtt_keep_alive)
@@ -295,6 +291,7 @@ class OCRProcessHandler(FileSystemEventHandler):
 
     def do_tasks(self, directory):
         timestamp = self.extract_timestamp(directory)
+        print(timestamp)
         port = self.extract_port(directory)
         setting_ids = load_setting_ids(port)
         images = self.extract_image_pathes(directory)
@@ -307,10 +304,10 @@ class OCRProcessHandler(FileSystemEventHandler):
             ocr_value, image_path = ocr_handler.calculate_ocr_value(images)
             image_name = os.path.basename(image_path)
             print(image_name)
-            save_dir=f"{config.REGION_IMAGE_DIR}/{setting_id}"
+            save_dir = f"{config.REGION_IMAGE_DIR}/{setting_id}"
             os.makedirs(save_dir, exist_ok=True)
             save_path = f"{save_dir}/{image_name}"
-            print(save_path,image_path)
+            print(save_path, image_path)
             ocr_handler.save(image_path=image_path, save_path=save_path)
             print(ocr_value, image_path)
 
@@ -321,13 +318,15 @@ class OCRProcessHandler(FileSystemEventHandler):
                 setting_id=setting_id,
                 value=str(ocr_value),
                 event=event_type,
-                is_sent=is_send_alert
+                is_sent=is_send_alert,
+                raw_image_path=image_path,
+                region_image_path=save_path,
+                is_modified=False
             )
 
-            temp = utils.to_time_object(timestamp)
-            ui_timestamp = utils.to_time_string(temp)
+            ui_timestamp = utils.to_time_string(timestamp)
             send_message = {"setting_id": setting_id, "ocr_value": ocr_value, "timestamp": ui_timestamp,
-                            "event_type": event_type}
+                            "event_type": event_type, "region_image_path": "/".join(save_path.split("/")[4:])}
             self.send_message_to_browser(json.dumps(send_message))
 
             self.save(save_data)
@@ -337,6 +336,7 @@ class OCRProcessHandler(FileSystemEventHandler):
                 self.message_pool.add(alert_message)
 
         self.send_alert()
+        self.message_pool.clear()
 
     def create_alert_message(self, setting_id, ocr_value, event_type):
         email_message_creator = EmailMessageFactory().create(setting_id)
@@ -345,10 +345,13 @@ class OCRProcessHandler(FileSystemEventHandler):
 
     def calculate_event_type_and_is_send_alert(self, setting_id, ocr_value, timestamp):
         value_event_calculator = EventCalculatorFactory().create_event_calculator(setting_id)
-        event_policy = EventPolicyFactory().create_event_policy(setting_id)
         raw_event_type = value_event_calculator.calculate_status(ocr_value)
-        event_type, is_send_alert = event_policy.get_event_type(event_type=raw_event_type,
-                                                                event_time=utils.to_time_object(timestamp))
+        print(type(self.event_policies))
+        event_type, is_send_alert = self.event_policies[0][setting_id].get_event_type(event_type=raw_event_type,
+                                                                                      event_time=timestamp)
+        is_alert_valid = self.load_is_alert_valid(setting_id)
+        if not is_alert_valid:
+            is_send_alert = False
         return event_type, is_send_alert
 
     def send_alert(self):
@@ -374,30 +377,37 @@ class OCRProcessHandler(FileSystemEventHandler):
         return glob.glob(f"{directory}/*")
 
     def extract_timestamp(self, directory):
-        return os.path.basename(directory)
+        t = os.path.basename(directory)
+        timestamp = utils.to_time_object(t)
+        return timestamp
 
     def extract_port(self, directroy):
         arr = directroy.split("/")
         for s in arr:
             if "PORT" in s:
                 port_name = s
-        # port_name = directroy.split("/")[3]
-        print(port_name.split("_")[-1])
         return port_name.split("_")[-1]
+
+    def load_is_alert_valid(self, setting_id):
+        session = ScopedSessionClass()
+        is_alert_valid = session.query(DBThresholdSetting).filter(DBThresholdSetting.setting_id == setting_id).first()
+        return is_alert_valid
 
 
 def main():
-
     email_message_pool = EmailMessagePool()
     mqtt_client = MQTTClientFactory(on_connect=on_connect, on_disconnect=on_disconnect, user_name=None, password=None,
                                     on_message=None).create()
+    event_policies = EventPolicyFactory().create_event_policies()
+    print(type(event_policies))
     ocr_process_handler = OCRProcessHandler(
-                                            message_pool=email_message_pool,
-                                            mqtt_broker_ip=config.MQTT_BROKER_IP,
-                                            mqtt_client=mqtt_client,
-                                            mqtt_broker_port=config.MQTT_BROKER_PORT,
-                                            mqtt_keep_alive=config.MQTT_KEEP_ALIVE_SEC,
-                                            mqtt_topic=config.MQTT_BROWSER_TOPIC)
+        event_policies=event_policies,
+        message_pool=email_message_pool,
+        mqtt_broker_ip=config.MQTT_BROKER_IP,
+        mqtt_client=mqtt_client,
+        mqtt_broker_port=config.MQTT_BROKER_PORT,
+        mqtt_keep_alive=config.MQTT_KEEP_ALIVE_SEC,
+        mqtt_topic=config.MQTT_BROWSER_TOPIC)
     w = FileEventHandler(config.IMAGE_STORAGE_DIR, ocr_process_handler)
     w.run()
 
