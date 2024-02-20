@@ -25,6 +25,7 @@ class UsbCamera(Camera):
 
     def _get_cap(self):
         video_id = self._get_video_id()
+        #print(video_id)
         if video_id is not None:
             cap = cv2.VideoCapture(video_id)
             # 画像をキャプチャする
@@ -35,8 +36,11 @@ class UsbCamera(Camera):
 
     def _get_video_id(self):
         usb_hub = UsbHub(mapping=config.USB_PORT_MAPPING)
+        #print(usb_hub.mapping)
         port_id = usb_hub.get_port_id(self.port)
+        #print(f"port_id:{port_id}")
         usb_video_device = UsbVideoDevice()
+        #print("ok")
         return usb_video_device.get_video_id(port_id)
 
     @staticmethod
@@ -48,7 +52,9 @@ class UsbCamera(Camera):
 
     def get_image(self):
         cap = self._get_cap()
+        #print(cap)
         if cap is None:
+            #print("none")
             return None
         image = None
         for i in range(self.fps):
@@ -65,47 +71,42 @@ class UsbHub:
         return self.mapping[port]
 
 
-class UsbVideoDevice():
+class UsbVideoDevice:
     def __init__(self):
         self.__device_list = []
-
+        #print("usb?")
         try:
             cmd = 'ls -la /dev/v4l/by-id'
             res = subprocess.check_output(cmd.split())
             by_id = res.decode()
         except Exception as e:
             print(e)
-
+        #print("done")
         try:
             cmd = 'ls -la /dev/v4l/by-path'
             res = subprocess.check_output(cmd.split())
             by_path = res.decode()
         except Exception as e:
             print(e)
-
-        # デバイス名取得
-        device_names = {}
-        for line in by_id.split('\n'):
-            if '../../video' in line:
-                tmp = self.__split(line, ' ')
-                if "" in tmp:
-                    tmp.remove("")
-                name = tmp[8]
-                device_id = tmp[10].replace('../../video', '')
-                device_names[device_id] = name
-
+        #print("done")
+      
+          
+                
         # ポート番号取得
         for line in by_path.split('\n'):
+            
             if 'usb-0' in line:
+                #print(line)
                 tmp = self.__split(line, '0-usb-0:1.')
                 tmp = self.__split(tmp[1], ':')
                 port = tmp[0]
+                #print(port)
                 tmp = self.__split(tmp[1], '../../video')
                 device_id = int(tmp[1])
-                if device_id % 2 == 0:
-                    name = device_names[str(device_id)]
-                    self.__device_list.append((device_id, port, name))
-
+                #print(f"device_id:{device_id}")
+                self.__device_list.append((device_id, port))
+        
+        
     @staticmethod
     def __split(string, val):
         tmp = string.split(val)
@@ -121,7 +122,8 @@ class UsbVideoDevice():
     # ポート番号（1..）を指定してVideoIDを取得する
     def get_video_id(self, port):
         print(self.__device_list)
-        for (device_id, p, _) in self.__device_list:
+        for (device_id, p) in self.__device_list:
             if p == port:
+                print(device_id,port)
                 return device_id
         return None

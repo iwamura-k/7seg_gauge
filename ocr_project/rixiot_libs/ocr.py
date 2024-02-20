@@ -7,7 +7,7 @@ import cv2
 from PIL import Image
 import pytesseract
 # 自作モジュール
-
+import uuid
 from common_libs.schema import Coordinate
 
 
@@ -153,6 +153,14 @@ def roi_image(image, p_left_x, p_left_y, p_right_x, p_right_y):
     return image[p_left_y: p_right_y, p_left_x: p_right_x]
 
 
+def blur_image(image):
+    height, width = image.shape[:2]
+    kernel_size = int(height // 10) if height < width else int(width // 10)
+    if kernel_size % 2 == 0:
+        kernel_size += 1
+    return cv2.medianBlur(image, kernel_size)
+
+
 def save_image(image, path):
     cv2.imwrite(path, image)
 
@@ -208,7 +216,7 @@ class SegmentOCREngine:
     ７セグメントの点灯状態を判別し、７セグ画像をOCRするエンジン
     """
     matching_pattern = {"0000000": "", "1011111": "0", "0000011": "1", "1110110": "2", "1110011": "3", "0101011": "4",
-                        "1111001": "5", "1111101": "6", "1000011": "7", "1111111": "8", "1101011": "9", "1111011": "9",
+                        "1111001": "5", "1111101": "6", "1000011": "7",  "1001011": "7","1111111": "8", "1101011": "9", "1111011": "9",
                         "0100000": "-"}
 
     def __init__(self, segment_color):
@@ -223,23 +231,20 @@ class SegmentOCREngine:
         :return:
         """
         result = []
+        # print(ocr_points)
         for point in ocr_points:
             x = point.x
             y = point.y
             segment_value = binary_image[y, x]
             result.append(self._calculate_segment_state(segment_value))
-
+        print(self._segment_color)
+        print(result)
         return result
 
     def _calculate_segment_state(self, segment_value):
-        if self._segment_color == "white":
-            if segment_value > 0:
-                return "1"
-            return "0"
-        if self._segment_color == "black":
-            if segment_value > 0:
-                return "0"
+        if segment_value > 0:
             return "1"
+        return "0"
 
     def recognize_string(self, preprocessed_image, ocr_points):
         """
@@ -248,6 +253,7 @@ class SegmentOCREngine:
         :param segment_image: 一桁セグメントの画像
         :return: 一桁セグメントの画像のOCR文字
         """
+        # cv2.imwrite(f"{str(uuid.uuid4())}_test.jpg",preprocessed_image)
         segment_state = self._calculate_7seg_state(preprocessed_image, ocr_points)
         result = "".join(segment_state)
         if result in self.matching_pattern:
@@ -312,10 +318,10 @@ class DecimalPointOCREngine:
 
 
 class OCRHandler:
-    segment_number = {"": 0, "0": 6, "1": 2, "2": 5, "3": 5, "4": 5, "5": 5, "6": 5, "7": 4, "8": 7, "9": 6, "-": 1}
+    segment_number = {"": 0, "0": 6, "1": 2, "2": 5, "3": 5, "4": 4, "5": 5, "6": 5, "7": 4, "8": 7, "9": 6, "-": 1}
 
     def __init__(self, ocr_points, display_region, on_color, off_color, segment_regions, segment_ocr_engine,
-                 tesseract_ocr_engine, decimal_point_ocr_engine):
+                 tesseract_ocr_engine, decimal_point_ocr_engine, is_off_segment_color):
         """
         :param ocr_points: 桁数分の７セグメントの認識点座標
         :param display_region: ７セグ表示領域
@@ -331,6 +337,7 @@ class OCRHandler:
         self._segment_ocr_engine = segment_ocr_engine
         self._tesseract_ocr_engine = tesseract_ocr_engine
         self._decimal_point_ocr_engine = decimal_point_ocr_engine
+        self._is_off_segment_color = is_off_segment_color
 
     def to_normalized_gray_image(self, bgr_image):
         """
@@ -341,19 +348,28 @@ class OCRHandler:
         """
         # 表示領域を抽出
         perspective_image = get_perspective_image(self._display_region, bgr_image)
+        # cv2.imwrite("raw_img.jpg", perspective_image)
         # 差分画素値の取得
-        diff_color = calculate_difference_color(self._on_color, self._off_color)
-        # 差分画像の取得
-        diff_image = to_difference_image(diff_color, perspective_image)
+        diff_image = perspective_image
+        if self._is_off_segment_color:
+            diff_color = calculate_difference_color(self._on_color, self._off_color)
+            # 差分画像の取得
+            diff_image = to_difference_image(diff_color, perspective_image)
+            # cv2.imwrite("diff_img.jpg", diff_image)
         # 正規化画像の取得
         normalized_image = normalize_image(diff_image)
+
         if np.sum(self._off_color) > np.sum(self._on_color):
             normalized_image = cv2.bitwise_not(normalized_image)
+        # cv2.imwrite("norm_img.jpg", normalized_image)
         # グレースケール画像の取得
         gray_image = to_gray_image(normalized_image)
-        # 正規化したグレースケール画像の取得
-        normalized_gray_image = normalize_gray_image(gray_image)
 
+        blurred_image = blur_image(gray_image)
+        # cv2.imwrite("gray_img.jpg", gray_image)
+        # 正規化したグレースケール画像の取得
+        normalized_gray_image = normalize_gray_image(blurred_image)
+        cv2.imwrite("norm_gray_img.jpg", normalized_gray_image)
         return normalized_gray_image
 
     def image_to_string(self, bgr_image):
@@ -415,6 +431,7 @@ class OCRHandler:
 
     def calculate_segment_result(self, normalized_gray_image):
         result = []
+        # print(self._ocr_points)
         for segment_region, ocr_points in zip(self._segment_regions, self._ocr_points):
             p_left_x = int(segment_region["region_left_x"])
             p_left_y = int(segment_region["region_left_y"])
@@ -425,10 +442,13 @@ class OCRHandler:
                                       p_left_y=p_left_y,
                                       p_right_x=p_right_x,
                                       p_right_y=p_right_y)
-
-            adaptive_binary_image = binarize_gray_image_by_adaptive(clipped_image)
-            otsu_binary_image = binarize_gray_image_by_otsu(clipped_image)
-
+            cv2.imwrite(f"clipped/{str(p_left_x)}_gray_img.jpg", clipped_image)
+            averaged_img = cv2.blur(clipped_image, (9, 9))
+            adaptive_binary_image = binarize_gray_image_by_adaptive(averaged_img)
+            otsu_binary_image = binarize_gray_image_by_otsu(averaged_img)
+            cv2.imwrite(f"clipped/{str(p_left_x)}_apaptive.jpg", adaptive_binary_image)
+            cv2.imwrite(f"clipped/{str(p_left_x)}_otsu.jpg", otsu_binary_image)
+            # print(ocr_points)
             adaptive_ocr_string = self._segment_ocr_engine.recognize_string(adaptive_binary_image, ocr_points)
             otsu_ocr_string = self._segment_ocr_engine.recognize_string(otsu_binary_image, ocr_points)
 
@@ -515,11 +535,12 @@ class OCRHandler:
             return s2
         return s1
 
-    def save(self, image_path,save_path):
+    def save(self, image_path, save_path):
 
         bgr_image = load_image(image_path)
         region_image = get_perspective_image(self._display_region, bgr_image)
-        save_image(image=region_image,path=save_path)
+        save_image(image=region_image, path=save_path)
+
 
 class OCRMajorityVote:
 

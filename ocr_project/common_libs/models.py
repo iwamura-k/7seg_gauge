@@ -181,7 +181,8 @@ class OCRSetting:
                                    pivot_color=setting.pivot_color_select,
                                    pivot_size=int(setting.pivot_size),
                                    segment_recognition_points=json.dumps(recognition_points),
-                                   decimal_exponents=json.dumps(decimal_exponents)
+                                   decimal_exponents=json.dumps(decimal_exponents),
+                                   is_off_segment_color=setting.is_off_segment_color
                                    )
 
         db.add(new_setting)
@@ -239,7 +240,8 @@ class OCRSetting:
             is_segment_outline_setting_enabled=setting.is_segment_points_detection,
             decimal_point_table=json.loads(setting.decimal_point_setting),
             pivot_color_select=setting.pivot_color,
-            pivot_size=setting.pivot_size
+            pivot_size=setting.pivot_size,
+            is_off_segment_color=setting.is_off_segment_color
         )
 
         return send_data
@@ -284,6 +286,7 @@ class OCRSetting:
         db_setting.setting_image = setting.image_name
         db_setting.segment_recognition_points = json.dumps(recognition_points)
         db_setting.decimal_exponents = json.dumps(decimal_exponents)
+        db_setting.is_off_segment_color = setting.is_off_segment_color
         db.commit()
         db.refresh(db_setting)
 

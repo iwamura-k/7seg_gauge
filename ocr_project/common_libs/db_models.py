@@ -74,6 +74,7 @@ class DBOCRSetting(Base):
     is_setting_disabled = Column(Boolean)
     pivot_color = Column(String)
     pivot_size = Column(Integer)
+    is_off_segment_color = Column(Boolean)
     segment_recognition_points = Column(JSON)
     decimal_exponents = Column(JSON)
     # 親テーブルとのリレーションシップを設定（オプショナル）

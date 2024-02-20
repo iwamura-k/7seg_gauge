@@ -1,6 +1,6 @@
 import sys
 sys.path.append('/home/pi/.local/lib/python3.9/site-packages')
-
+sys.path.append('/home/pi/ocr_project')
 import threading
 import time
 from rixiot_libs.camera import create_camera
@@ -9,7 +9,7 @@ import cv2
 import config
 from common_libs.db_models import DBCameraSetting
 from common_libs import utils
-from common_libs.db_models import start_sqlorm, SessionClass
+from common_libs.db_models import SessionClass
 from rixiot_libs.mqtt_factory import MQTTClientFactory, on_connect, on_disconnect
 from image_processing_task import EmailMessagePool,EventPolicyFactory
 
@@ -19,6 +19,7 @@ def get_camera_list():
     print(port_list)
     camera_list = [create_camera(config.CameraType.USB, port=port[0], fps=config.FPS, buffer_size=1) for port in
                    port_list]
+    print(camera_list)
     return camera_list
 
 
@@ -38,16 +39,18 @@ class CameraImageStorage(threading.Thread):
             timestamp = utils.get_timestamp()
             for camera in self._camera_list:
                 try:
-                    print(camera.port)
+                    print(f"camera.port:{camera.port}")
                     image_directory = f"{config.IMAGE_STORAGE_DIR}/PORT_{camera.port}/{timestamp}"
-                    os.makedirs(image_directory, exist_ok=True)
+                    
                     image_list = []
                     for i in range(config.IMAGE_COUNT):
+                        print(str(i))
                         image_list.append(camera.get_image())
                         time.sleep(1)
+                    os.makedirs(image_directory, exist_ok=True)
                     for i, image in enumerate(image_list):
                         if image is not None:
-                            cv2.imwrite(f"{image_directory}/{i}.jpg", image)
+                            cv2.imwrite(f"{image_directory}/{timestamp}_{i}.jpg", image)
 
                 except Exception as e:
 
@@ -76,7 +79,7 @@ class CameraImageStorage(threading.Thread):
 #thread_instance = CameraImageStorage(camera_list=camera_list)
 
 if __name__ == "__main__":
-    start_sqlorm()
+    
     # スレッドのインスタンスをグローバルに保持
     camera_list = get_camera_list()
     mqtt_client = MQTTClientFactory(on_connect=on_connect, on_disconnect=on_disconnect, user_name=None, password=None,

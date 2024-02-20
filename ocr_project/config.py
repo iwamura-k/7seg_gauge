@@ -42,7 +42,7 @@ class CameraType(Enum):
 
 IMAGE_COUNT = 10
 
-# OCR_CONFIG="-l 7seg --psm 10 --oem 1 -c tessedit_char_whitelist=-0123456789 --dpi 300"
+SS_OCR_CONFIG="-l 7seg --psm 10 --oem 1 -c tessedit_char_whitelist=-0123456789 --dpi 300"
 OCR_CONFIG = "-l eng --psm 10 --oem 1 -c tessedit_char_whitelist=-0123456789 --dpi 300"
 TESSERACT_PATH = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
@@ -56,7 +56,7 @@ DB_PATH = f"sqlite:///{databese_file}"
 
 TARGET_DIRECTORY = '/'
 MAX_PERCENTAGE_OF_DATA = 90
-MQTT_BROKER_IP = "192.168.3.35"
+MQTT_BROKER_IP = "127.0.0.1"
 MQTT_BROKER_PORT = 1883
 MQTT_BROWSER_TOPIC = "mqtt_test"
 MQTT_KEEP_ALIVE_SEC = 60

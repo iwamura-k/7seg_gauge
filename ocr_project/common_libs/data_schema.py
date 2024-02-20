@@ -96,6 +96,7 @@ class UIOCRSetting(BaseModel):
     decimal_point_table: list
     pivot_color_select: str
     pivot_size: int
+    is_off_segment_color:bool
 
 
 class UIOCRSetting2(BaseModel):
@@ -126,6 +127,7 @@ class UIOCRSetting2(BaseModel):
     decimal_point_table: list
     pivot_color_select: str
     pivot_size: int
+    is_off_segment_color:bool
 
 
 class BaseThresholdSetting(BaseModel):

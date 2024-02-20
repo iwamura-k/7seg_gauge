@@ -7,6 +7,7 @@ sys.path.append('/home/pi/.local/lib/python3.9/site-packages')
 sys.path.append('/home/pi/ocr_project')
 import time
 import numpy as np
+import cv2
 
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers.polling import PollingObserver
@@ -41,6 +42,7 @@ class OCRHandlerFactory:
     def load_ocr_setting(self, setting_id):
         session = ScopedSessionClass()
         setting = session.query(DBOCRSetting).filter(DBOCRSetting.id == setting_id).all()[0]
+        # print(session.query(DBOCRSetting).filter(DBOCRSetting.id == setting_id).all()[0].segment_point_setting)
         return setting
 
     def create_ocr_handlers(self):
@@ -50,22 +52,25 @@ class OCRHandlerFactory:
 
     def create_ui_ocr_handler(self, setting_id):
         ocr_points = self._calculate_ocr_points(setting_id)
+        print(ocr_points)
         display_region = self._load_display_region(setting_id)
         segment_regions = self._load_segment_regions(setting_id)
         on_color = self._load_on_color(setting_id)
         off_color = self._load_off_color(setting_id)
-        tesseract_ocr_engine = self._create_tesseract_ocr_engine()
         decimal_point_ocr_engine = self._create_decimal_point_ocr_engine(setting_id)
         is_segment_points_detection = self._load_is_segment_points_detection(setting_id)
+        tesseract_ocr_engine = self._create_tesseract_ocr_engine(is_segment_points_detection)
+        is_off_segment_color = self._load_is_off_segment_color(setting_id)
         if is_segment_points_detection:
             segment_ocr_engine = self._create_segment_ocr_engine(setting_id)
         else:
             segment_ocr_engine = None
-
+        print(tesseract_ocr_engine._ocr_config, setting_id)
         return OCRHandler(
             tesseract_ocr_engine=tesseract_ocr_engine, segment_ocr_engine=segment_ocr_engine,
             decimal_point_ocr_engine=decimal_point_ocr_engine, ocr_points=ocr_points, display_region=display_region,
-            segment_regions=segment_regions, on_color=on_color, off_color=off_color)
+            segment_regions=segment_regions, on_color=on_color, off_color=off_color,
+            is_off_segment_color=is_off_segment_color)
 
     def create_ocr_handler(self, setting_id):
         setting = self.load_ocr_setting(setting_id)
@@ -76,18 +81,19 @@ class OCRHandlerFactory:
         segment_regions = self._load_segment_regions(setting_id)
         on_color = self._load_on_color(setting_id)
         off_color = self._load_off_color(setting_id)
-        tesseract_ocr_engine = self._create_tesseract_ocr_engine()
         decimal_point_ocr_engine = self._create_decimal_point_ocr_engine(setting_id)
         is_segment_points_detection = self._load_is_segment_points_detection(setting_id)
+        tesseract_ocr_engine = self._create_tesseract_ocr_engine(is_segment_points_detection)
+        is_off_segment_color = self._load_is_off_segment_color(setting_id)
         if is_segment_points_detection:
             segment_ocr_engine = self._create_segment_ocr_engine(setting_id)
         else:
             segment_ocr_engine = None
-
+        print(tesseract_ocr_engine._ocr_config, setting_id)
         return OCRHandler(
             tesseract_ocr_engine=tesseract_ocr_engine, segment_ocr_engine=segment_ocr_engine,
             decimal_point_ocr_engine=decimal_point_ocr_engine, ocr_points=ocr_points, display_region=display_region,
-            segment_regions=segment_regions, on_color=on_color, off_color=off_color)
+            segment_regions=segment_regions, on_color=on_color, off_color=off_color,is_off_segment_color=is_off_segment_color)
 
     def _load_display_region(self, setting_id):
         display_region = json.loads(self.load_ocr_setting(setting_id).perspective_transformation_setting)
@@ -111,10 +117,14 @@ class OCRHandlerFactory:
             return "black"
         return "white"
 
-    def _create_tesseract_ocr_engine(self):
+    def _create_tesseract_ocr_engine(self, is_segment_points_detection):
         tesseract_path = config.TESSERACT_PATH
+        if is_segment_points_detection:
+            ocr_config = config.SS_OCR_CONFIG
+        else:
+            ocr_config = config.OCR_CONFIG
 
-        return TesseractOCREngine(ocr_config=config.OCR_CONFIG, tesseract_path=tesseract_path)
+        return TesseractOCREngine(ocr_config=ocr_config, tesseract_path=tesseract_path)
 
     def _create_segment_ocr_engine(self, setting_id):
         segment_color = self._calculate_segment_color(setting_id)
@@ -140,13 +150,21 @@ class OCRHandlerFactory:
         segment_regions = self._load_segment_regions(setting_id)
         ocr_points = self._load_ocr_points(setting_id)
         int_ocr_points = []
+        # print(ocr_points)
+
         for segment_region, ocr_point in zip(segment_regions, ocr_points):
+            print(ocr_point)
             offset_x = int(segment_region["region_left_x"])
             offset_y = int(segment_region["region_left_y"])
             int_ocr_points.append(
                 [Coordinate(x=int(point[0]) - offset_x, y=int(point[1]) - offset_y) for point in ocr_point])
-
+        print(int_ocr_points)
         return int_ocr_points
+
+    def _load_is_off_segment_color(self, setting_id):
+        ret = self.load_ocr_setting(setting_id).is_off_segment_color
+        print(ret)
+        return ret
 
 
 class EventCalculatorFactory:
@@ -280,7 +298,10 @@ class OCRProcessHandler(FileSystemEventHandler):
         directory = event.src_path.replace(os.sep, '/')
         print(directory)
         print(os.path.isdir(directory))
-        if os.path.isdir(directory):
+        timestamp = os.path.basename(directory)
+        print(timestamp)
+        if os.path.isdir(directory) and timestamp.isdecimal():
+            time.sleep(10)
             self.do_tasks(directory)
 
     def send_message_to_browser(self, message):
@@ -309,8 +330,6 @@ class OCRProcessHandler(FileSystemEventHandler):
             save_path = f"{save_dir}/{image_name}"
             print(save_path, image_path)
             ocr_handler.save(image_path=image_path, save_path=save_path)
-            print(ocr_value, image_path)
-
             event_type, is_send_alert = self.calculate_event_type_and_is_send_alert(setting_id, ocr_value,
                                                                                     timestamp)
             save_data = SensorValue2(
